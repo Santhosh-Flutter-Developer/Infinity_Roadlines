@@ -134,81 +134,91 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                             ),
                           );
                         }
-                        final trip = trips.first;
-                        return Card(
-                          elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(color: Theme.of(context).colorScheme.outline.withOpacity(0.5), width: 1.5),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        return ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: trips.length,
+                          itemBuilder: (context, index) {
+                            final trip = trips[index];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              elevation: 4,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: Theme.of(context).colorScheme.outline.withOpacity(0.5), width: 1.5),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(trip.tripNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                                    Consumer(
-                                      builder: (context, ref, child) {
-                                        final lrsAsync = ref.watch(lrListProvider);
-                                        bool allDelivered = false;
-                                        if (lrsAsync.value != null && lrsAsync.value!.isNotEmpty) {
-                                          allDelivered = lrsAsync.value!.every((lr) => lr.status.toLowerCase() == 'delivered');
-                                        }
-                                        final displayStatus = allDelivered ? 'completed' : trip.status.toLowerCase();
-                                        return _buildStatusBadge(displayStatus, context);
-                                      },
-                                    )
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(trip.tripNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                                        Consumer(
+                                          builder: (context, ref, child) {
+                                            final selectedTripId = ref.watch(selectedTripIdProvider);
+                                            final lrsAsync = ref.watch(lrListProvider);
+                                            bool allDelivered = false;
+                                            if (selectedTripId == trip.tripId && lrsAsync.value != null && lrsAsync.value!.isNotEmpty) {
+                                              allDelivered = lrsAsync.value!.every((lr) => lr.status.toLowerCase() == 'delivered');
+                                            }
+                                            final displayStatus = allDelivered ? 'completed' : trip.status.toLowerCase();
+                                            return _buildStatusBadge(displayStatus, context);
+                                          },
+                                        )
+                                      ],
+                                    ),
+                                    const Divider(height: 24),
+                                    Text('Trip Date: ${trip.date.day.toString().padLeft(2, '0')}-${trip.date.month.toString().padLeft(2, '0')}-${trip.date.year}', style: const TextStyle(fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Text('Vehicle Number: ${trip.vehicleNumber}', style: const TextStyle(fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Text('Driver Name: ${trip.driverName}', style: const TextStyle(fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Text('Destination: ${trip.toStops.join(" ➔ ")}', style: const TextStyle(fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Text('LR Count: ${trip.totalLR}', style: const TextStyle(fontSize: 14)),
+                                    if (trip.remarks.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text('Remarks: ${trip.remarks}', style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Colors.grey)),
+                                    ],
+                                    const SizedBox(height: 16),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: Consumer(
+                                        builder: (context, ref, child) {
+                                          final selectedTripId = ref.watch(selectedTripIdProvider);
+                                          final lrsAsync = ref.watch(lrListProvider);
+                                          bool allDelivered = false;
+                                          if (selectedTripId == trip.tripId && lrsAsync.value != null && lrsAsync.value!.isNotEmpty) {
+                                            allDelivered = lrsAsync.value!.every((lr) => lr.status.toLowerCase() == 'delivered');
+                                          }
+                                          final displayStatus = allDelivered ? 'completed' : trip.status.toLowerCase();
+
+                                          return ElevatedButton(
+                                            onPressed: () {
+                                              ref.read(selectedTripIdProvider.notifier).state = trip.tripId;
+                                              if (displayStatus == 'pending') {
+                                                ref.read(firestoreServiceProvider).updateTripStatus(trip.tripId, 'started');
+                                              }
+                                              context.go('/driver/trips/${trip.tripId}');
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: displayStatus == 'completed' ? Colors.green : Theme.of(context).colorScheme.primary,
+                                              foregroundColor: Colors.white,
+                                            ),
+                                            child: Text(displayStatus == 'completed' ? 'Completed' : (displayStatus == 'pending' ? 'Start Trip' : 'View Trip Sheet')),
+                                          );
+                                        },
+                                      ),
+                                    ),
                                   ],
                                 ),
-                                const Divider(height: 24),
-                                Text('Trip Date: ${trip.date.day.toString().padLeft(2, '0')}-${trip.date.month.toString().padLeft(2, '0')}-${trip.date.year}', style: const TextStyle(fontSize: 14)),
-                                const SizedBox(height: 4),
-                                Text('Vehicle Number: ${trip.vehicleNumber}', style: const TextStyle(fontSize: 14)),
-                                const SizedBox(height: 4),
-                                Text('Driver Name: ${trip.driverName}', style: const TextStyle(fontSize: 14)),
-                                const SizedBox(height: 4),
-                                Text('Destination: ${trip.toStops.join(" ➔ ")}', style: const TextStyle(fontSize: 14)),
-                                const SizedBox(height: 4),
-                                Text('LR Count: ${trip.totalLR}', style: const TextStyle(fontSize: 14)),
-                                if (trip.remarks.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text('Remarks: ${trip.remarks}', style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Colors.grey)),
-                                ],
-                                const SizedBox(height: 16),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: Consumer(
-                                    builder: (context, ref, child) {
-                                      final lrsAsync = ref.watch(lrListProvider);
-                                      bool allDelivered = false;
-                                      if (lrsAsync.value != null && lrsAsync.value!.isNotEmpty) {
-                                        allDelivered = lrsAsync.value!.every((lr) => lr.status.toLowerCase() == 'delivered');
-                                      }
-                                      final displayStatus = allDelivered ? 'completed' : trip.status.toLowerCase();
-
-                                      return ElevatedButton(
-                                        onPressed: () {
-                                          ref.read(selectedTripIdProvider.notifier).state = trip.tripId;
-                                          if (displayStatus == 'pending') {
-                                            ref.read(firestoreServiceProvider).updateTripStatus(trip.tripId, 'started');
-                                          }
-                                          context.go('/driver/trips/${trip.tripId}');
-                                        },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: displayStatus == 'completed' ? Colors.green : Theme.of(context).colorScheme.primary,
-                                          foregroundColor: Colors.white,
-                                        ),
-                                        child: Text(displayStatus == 'completed' ? 'Completed' : (displayStatus == 'pending' ? 'Start Trip' : 'View Trip Sheet')),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                              ),
+                            );
+                          },
                         );
                       },
                       loading: () => const Center(child: CircularProgressIndicator()),
