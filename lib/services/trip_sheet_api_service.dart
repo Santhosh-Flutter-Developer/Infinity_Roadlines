@@ -5,6 +5,7 @@ import '../models/trip_sheet_model.dart';
 class TripSheetApiService {
   final Dio _dio = Dio();
   final String _baseUrl = 'https://sriseosolutions.com/mahendran/infinity_roadlines/api/get_trip_sheet_list.php';
+  final String _acknowledgementUrl = 'https://sriseosolutions.com/mahendran/infinity_roadlines/api/driver_acknowledgement.php';
 
   Future<List<TripSheetModel>> fetchTripSheets({
     String fromDate = '',
@@ -79,6 +80,62 @@ class TripSheetApiService {
       } else {
         throw Exception('Invalid API response format');
       }
+    } on DioException catch (e, stackTrace) {
+      print(e);
+      print(stackTrace);
+      if (e.response != null) {
+        throw Exception('Server error: ${e.response?.data?['message'] ?? e.response?.statusCode}');
+      } else {
+        throw Exception('Network error: Please check your connection.');
+      }
+    } catch (e, stackTrace) {
+      print(e);
+      print(stackTrace);
+      throw Exception(e.toString());
+    }
+  }
+
+  /// Sends the driver's Accept/Reject decision for a trip sheet.
+  /// [status] must be either 'Accepted' or 'Rejected'.
+  /// Returns true if the API confirms the acknowledgement was saved.
+  Future<bool> acknowledgeTrip({
+    required String tripSheetId,
+    required String status,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedToken = prefs.getString('token') ?? '';
+      final token = savedToken.trim().replaceAll('\n', '').replaceAll('\r', '').replaceAll('"', '');
+
+      if (token.isEmpty) {
+        throw Exception("Token is required. Please login first.");
+      }
+
+      final headers = {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      };
+
+      final body = {
+        'trip_sheet_id': tripSheetId,
+        'status': status,
+        'token': token,
+      };
+
+      final response = await _dio.post(
+        _acknowledgementUrl,
+        data: body,
+        options: Options(headers: headers),
+      );
+
+      print("ACK STATUS = ${response.statusCode}");
+      print("ACK BODY = ${response.data}");
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        return data['status'] == true;
+      }
+      return false;
     } on DioException catch (e, stackTrace) {
       print(e);
       print(stackTrace);

@@ -37,6 +37,24 @@ class TripSheetNotifier extends StateNotifier<AsyncValue<List<TripSheetModel>>> 
       state = AsyncValue.error(e, stack);
     }
   }
+
+  /// Sends the driver's Accept/Reject decision to the server.
+  /// On success, refreshes the trip sheet list so the UI reflects the
+  /// latest acknowledgement_status / trip_status from the backend.
+  /// Returns true if the API confirmed the update.
+  Future<bool> acknowledgeTrip({
+    required String tripSheetId,
+    required String status,
+  }) async {
+    final confirmed = await _repository.acknowledgeTrip(
+      tripSheetId: tripSheetId,
+      status: status,
+    );
+    if (confirmed) {
+      await fetchTripSheets();
+    }
+    return confirmed;
+  }
 }
 
 final tripSheetsProvider = StateNotifierProvider<TripSheetNotifier, AsyncValue<List<TripSheetModel>>>((ref) {

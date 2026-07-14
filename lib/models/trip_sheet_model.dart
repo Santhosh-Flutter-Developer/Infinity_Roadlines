@@ -21,6 +21,8 @@ class TripSheetModel {
   final String vehicleRent;
   final String isTripsheetEntry;
   final String remarks;
+  final String tripStatus;
+  final String acknowledgementStatus;
 
   TripSheetModel({
     required this.tripSheetId,
@@ -43,6 +45,8 @@ class TripSheetModel {
     required this.vehicleRent,
     required this.isTripsheetEntry,
     required this.remarks,
+    required this.tripStatus,
+    required this.acknowledgementStatus,
   });
 
   factory TripSheetModel.fromJson(Map<String, dynamic> json) {
@@ -79,6 +83,8 @@ class TripSheetModel {
       vehicleRent: json['vehicle_rent']?.toString() ?? '',
       isTripsheetEntry: json['is_tripsheet_entry']?.toString() ?? '',
       remarks: json['remarks']?.toString() ?? '',
+      tripStatus: json['trip_status']?.toString() ?? 'Pending',
+      acknowledgementStatus: json['acknowledgement_status']?.toString() ?? 'Pending',
     );
   }
 
@@ -104,6 +110,8 @@ class TripSheetModel {
       'vehicle_rent': vehicleRent,
       'is_tripsheet_entry': isTripsheetEntry,
       'remarks': remarks,
+      'trip_status': tripStatus,
+      'acknowledgement_status': acknowledgementStatus,
     };
   }
 
@@ -119,7 +127,8 @@ class TripSheetModel {
       driverMobile: driverNumber,
       from: fromBranchName,
       toStops: toBranchNames.isNotEmpty ? toBranchNames : [destinationName],
-      status: isTripsheetEntry == '1' ? 'STARTED' : 'PENDING',
+      status: tripStatus.toUpperCase(),
+      acknowledgementStatus: acknowledgementStatus,
       gpsStatus: 'Active',
       totalLR: lrCount,
       pendingLR: lrCount,

@@ -27,4 +27,11 @@ class TripSheetRepository {
       pageLimit: pageLimit,
     );
   }
+
+  Future<bool> acknowledgeTrip({
+    required String tripSheetId,
+    required String status,
+  }) {
+    return _apiService.acknowledgeTrip(tripSheetId: tripSheetId, status: status);
+  }
 }

@@ -10,6 +10,7 @@ class TripModel {
   final String from;
   final List<String> toStops;
   final String status; // "PENDING" | "STARTED" | "COMPLETED"
+  final String acknowledgementStatus; // "Pending" | "Accepted" | "Rejected"
   final String gpsStatus; // "Active" | "Disabled"
   final int totalLR;
   final int pendingLR;
@@ -33,6 +34,7 @@ class TripModel {
     required this.from,
     required this.toStops,
     required this.status,
+    this.acknowledgementStatus = 'Pending',
     required this.gpsStatus,
     required this.totalLR,
     required this.pendingLR,
@@ -61,6 +63,7 @@ class TripModel {
       from: json['from'] ?? '',
       toStops: List<String>.from(json['toStops'] ?? []),
       status: json['status'] ?? 'PENDING',
+      acknowledgementStatus: json['acknowledgementStatus'] ?? 'Pending',
       gpsStatus: json['gpsStatus'] ?? 'Active',
       totalLR: json['totalLR'] ?? 0,
       pendingLR: json['pendingLR'] ?? 0,
@@ -86,6 +89,7 @@ class TripModel {
       'from': from,
       'toStops': toStops,
       'status': status,
+      'acknowledgementStatus': acknowledgementStatus,
       'gpsStatus': gpsStatus,
       'totalLR': totalLR,
       'pendingLR': pendingLR,
@@ -100,6 +104,7 @@ class TripModel {
 
   TripModel copyWith({
     String? status,
+    String? acknowledgementStatus,
     int? pendingLR,
     int? deliveredLR,
     String? gpsStatus,
@@ -116,6 +121,7 @@ class TripModel {
       from: from,
       toStops: toStops,
       status: status ?? this.status,
+      acknowledgementStatus: acknowledgementStatus ?? this.acknowledgementStatus,
       gpsStatus: gpsStatus ?? this.gpsStatus,
       totalLR: totalLR,
       pendingLR: pendingLR ?? this.pendingLR,
