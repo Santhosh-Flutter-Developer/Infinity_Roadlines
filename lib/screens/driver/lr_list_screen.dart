@@ -28,33 +28,68 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
   }
 
   void _showDeliveryConfirmationDialog(String lrId) {
+    bool isSubmitting = false;
+
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Delivery Confirmation'),
-          content: const Text('Are you sure you have delivered this LR?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                ref.read(lrListProvider.notifier).markLRDelivered(lrId);
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('LR Marked as Delivered')),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Confirm'),
-            ),
-          ],
+      barrierDismissible: !isSubmitting,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: const Text('Delivery Confirmation'),
+              content: const Text('Are you sure you have delivered this LR?'),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          setDialogState(() => isSubmitting = true);
+                          try {
+                            await ref.read(lrListProvider.notifier).markLRDelivered(
+                                  lrId,
+                                  tripSheetId: widget.tripId,
+                                );
+
+                            if (!dialogContext.mounted) return;
+                            Navigator.of(dialogContext).pop();
+
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('LR Marked as Delivered')),
+                            );
+                          } catch (e) {
+                            if (!dialogContext.mounted) return;
+                            Navigator.of(dialogContext).pop();
+
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(e.toString().replaceFirst('Exception: ', '')),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Confirm'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -96,7 +131,7 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                 itemCount: lrs.length,
                 itemBuilder: (context, index) {
                   final lr = lrs[index];
-                  final isPending = lr.status.toLowerCase() != 'delivered';
+                  final isPending = lr.status.toLowerCase() != 'delivered' && lr.status.toLowerCase() != 'pending';
 
                   return Card(
                     elevation: 3,

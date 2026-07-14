@@ -5,6 +5,7 @@ import '../models/lr_model.dart';
 class LRApiService {
   final Dio _dio = Dio();
   final String _baseUrl = 'https://sriseosolutions.com/mahendran/infinity_roadlines/api/get_lr_list.php';
+  final String _deliveryStatusUrl = 'https://sriseosolutions.com/mahendran/infinity_roadlines/api/update_lr_delivery_status.php';
 
   Future<List<LRModel>> fetchLRList({
     String tripSheetId = '',
@@ -77,6 +78,65 @@ class LRApiService {
       } else {
         throw Exception('Invalid API response format');
       }
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception('Server error: ${e.response?.data?['message'] ?? e.response?.statusCode}');
+      }
+      throw Exception('Network error: Please check your connection.');
+    } catch (e) {
+      throw Exception(e.toString());
+    }
+  }
+
+  /// Marks the given LR as delivered on the server.
+  /// [lrId] and [tripSheetId] identify which LR/tripsheet to update.
+  /// Returns true if the API confirms the delivery status was updated.
+  Future<bool> updateDeliveryStatus({
+    required String lrId,
+    required String tripSheetId,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedToken = prefs.getString('token') ?? '';
+      final token = savedToken.trim().replaceAll('\n', '').replaceAll('\r', '').replaceAll('"', '');
+
+      if (token.isEmpty) {
+        throw Exception("Token is required. Please login first.");
+      }
+
+      final headers = {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      };
+
+      final body = {
+        'lr_id': int.tryParse(lrId) ?? lrId,
+        'trip_sheet_id': tripSheetId,
+        'token': token,
+      };
+
+      print("--- UPDATE LR DELIVERY STATUS REQUEST ---");
+      print("URL: $_deliveryStatusUrl");
+      print("Headers: $headers");
+      print("Body: $body");
+
+      final response = await _dio.post(
+        _deliveryStatusUrl,
+        data: body,
+        options: Options(headers: headers),
+      );
+
+      print("STATUS: ${response.statusCode}");
+      print("RESPONSE: ${response.data}");
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        if (data['status'] == true) {
+          return true;
+        }
+        throw Exception(data['message'] ?? 'Failed to update delivery status');
+      }
+      return false;
     } on DioException catch (e) {
       if (e.response != null) {
         throw Exception('Server error: ${e.response?.data?['message'] ?? e.response?.statusCode}');

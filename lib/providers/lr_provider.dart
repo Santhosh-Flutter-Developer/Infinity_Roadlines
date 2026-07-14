@@ -73,20 +73,19 @@ class LRListNotifier extends AsyncNotifier<List<LRModel>> {
     }
   }
 
-  Future<void> markLRDelivered(String lrId) async {
+  Future<void> markLRDelivered(String lrId, {required String tripSheetId}) async {
+    // Call the backend first; only update local state once the server confirms.
+    await ref.read(lrApiServiceProvider).updateDeliveryStatus(
+          lrId: lrId,
+          tripSheetId: tripSheetId,
+        );
+
     _locallyDeliveredIds.add(lrId); // Save to local memory to survive fetch resets
 
     final currentState = state;
     if (currentState is AsyncData) {
       final List<LRModel> currentLrs = currentState.value ?? [];
-      final updatedList = currentLrs.map((lr) {
-        if (lr.lrId == lrId) {
-          return lr.copyWith(deliveryStatus: 'Delivered');
-          // Note: Since 'status' wasn't natively mapped in copyWith for the live api field, we explicitly override status
-        }
-        return lr;
-      }).toList();
-      
+
       // We manually construct new models directly to guarantee 'status' updates for live APIs
       final strictlyUpdatedList = currentLrs.map((lr) {
         if (lr.lrId == lrId) {
