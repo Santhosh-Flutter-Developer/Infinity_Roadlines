@@ -1,0 +1,332 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/trip_provider.dart';
+import '../../providers/location_provider.dart';
+import '../../providers/theme_provider.dart';
+import '../../providers/trip_sheet_provider.dart';
+import '../../providers/trip_card_provider.dart';
+import '../../providers/lr_provider.dart';
+
+class DriverHomeScreen extends ConsumerStatefulWidget {
+  const DriverHomeScreen({super.key});
+
+  @override
+  ConsumerState<DriverHomeScreen> createState() => _DriverHomeScreenState();
+}
+
+class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(tripSheetsProvider.notifier).fetchTripSheets();
+      ref.read(tripCardsProvider.notifier).fetchTripCards();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(driverLocationNotifierProvider);
+
+    final user = ref.watch(authStateProvider).value;
+    final tripsAsync = ref.watch(driverTripsProvider);
+    final tripCardsAsync = ref.watch(driverTripCardsProvider);
+    final currentLocation = ref.watch(driverCurrentLocationProvider);
+    final themeMode = ref.watch(themeModeProvider);
+    final isGpsEnabled = ref.watch(isGpsEnabledProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(user != null ? 'Welcome, ${user.name}' : 'Today\'s Activity'),
+        actions: [
+          IconButton(
+            icon: Icon(themeMode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode),
+            onPressed: () {
+              ref.read(themeModeProvider.notifier).state =
+                  themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.person),
+            onPressed: () => context.go('/driver/profile'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () => ref.read(authNotifierProvider.notifier).logout(),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              color: isGpsEnabled ? Theme.of(context).colorScheme.primaryContainer : Colors.red.shade100,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(
+                    isGpsEnabled ? Icons.gps_fixed : Icons.gps_off,
+                    color: isGpsEnabled ? Theme.of(context).colorScheme.primary : Colors.red.shade700,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (!isGpsEnabled) ...[
+                          Text(
+                            'GPS Disabled - Please Enable Location Services',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade900,
+                            ),
+                          ),
+                        ] else if (currentLocation == null) ...[
+                          Text(
+                            'Acquiring Satellite GPS Signal...',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ] else ...[
+                          Text(
+                            'GPS Active: Lat ${currentLocation.latitude.toStringAsFixed(4)}, Lng ${currentLocation.longitude.toStringAsFixed(4)}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                          Text(
+                            'Battery: ${currentLocation.battery.toStringAsFixed(0)}% • Syncing Real-Time',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                            ),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('Active Trip Sheet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    tripsAsync.when(
+                      data: (trips) {
+                        if (trips.isEmpty) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Text('No Trip Sheet Assigned', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            ),
+                          );
+                        }
+                        final trip = trips.first;
+                        return Card(
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: Theme.of(context).colorScheme.outline.withOpacity(0.5), width: 1.5),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(trip.tripNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                                    Consumer(
+                                      builder: (context, ref, child) {
+                                        final lrsAsync = ref.watch(lrListProvider);
+                                        bool allDelivered = false;
+                                        if (lrsAsync.value != null && lrsAsync.value!.isNotEmpty) {
+                                          allDelivered = lrsAsync.value!.every((lr) => lr.status.toLowerCase() == 'delivered');
+                                        }
+                                        final displayStatus = allDelivered ? 'completed' : trip.status.toLowerCase();
+                                        return _buildStatusBadge(displayStatus, context);
+                                      },
+                                    )
+                                  ],
+                                ),
+                                const Divider(height: 24),
+                                Text('Trip Date: ${trip.date.day.toString().padLeft(2, '0')}-${trip.date.month.toString().padLeft(2, '0')}-${trip.date.year}', style: const TextStyle(fontSize: 14)),
+                                const SizedBox(height: 4),
+                                Text('Vehicle Number: ${trip.vehicleNumber}', style: const TextStyle(fontSize: 14)),
+                                const SizedBox(height: 4),
+                                Text('Driver Name: ${trip.driverName}', style: const TextStyle(fontSize: 14)),
+                                const SizedBox(height: 4),
+                                Text('Destination: ${trip.toStops.join(" ➔ ")}', style: const TextStyle(fontSize: 14)),
+                                const SizedBox(height: 4),
+                                Text('LR Count: ${trip.totalLR}', style: const TextStyle(fontSize: 14)),
+                                if (trip.remarks.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text('Remarks: ${trip.remarks}', style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Colors.grey)),
+                                ],
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: Consumer(
+                                    builder: (context, ref, child) {
+                                      final lrsAsync = ref.watch(lrListProvider);
+                                      bool allDelivered = false;
+                                      if (lrsAsync.value != null && lrsAsync.value!.isNotEmpty) {
+                                        allDelivered = lrsAsync.value!.every((lr) => lr.status.toLowerCase() == 'delivered');
+                                      }
+                                      final displayStatus = allDelivered ? 'completed' : trip.status.toLowerCase();
+
+                                      return ElevatedButton(
+                                        onPressed: () {
+                                          ref.read(selectedTripIdProvider.notifier).state = trip.tripId;
+                                          if (displayStatus == 'pending') {
+                                            ref.read(firestoreServiceProvider).updateTripStatus(trip.tripId, 'started');
+                                          }
+                                          context.go('/driver/trips/${trip.tripId}');
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: displayStatus == 'completed' ? Colors.green : Theme.of(context).colorScheme.primary,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        child: Text(displayStatus == 'completed' ? 'Completed' : (displayStatus == 'pending' ? 'Start Trip' : 'View Trip Sheet')),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (err, stack) => Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('Error: $err', textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: () => ref.read(tripSheetsProvider.notifier).fetchTripSheets(),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text('Trip Cards', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    tripCardsAsync.when(
+                      data: (cards) {
+                        if (cards.isEmpty) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Text('No Trip Cards Assigned', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            ),
+                          );
+                        }
+                        return ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: cards.length,
+                          itemBuilder: (context, index) {
+                            final card = cards[index];
+                            return Card(
+                              elevation: 4,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: Theme.of(context).colorScheme.outline.withOpacity(0.5), width: 1.5),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Trip Card: ${card.tripCardNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                                    const Divider(height: 24),
+                                    Text('Date: ${card.entryDate.day.toString().padLeft(2, '0')}-${card.entryDate.month.toString().padLeft(2, '0')}-${card.entryDate.year}', style: const TextStyle(fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Text('Vehicle Check: ${card.vehicleNumber}', style: const TextStyle(fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Text('Driver Name: ${card.driverName}', style: const TextStyle(fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Text('Route: ${card.fromBranch} ➔ ${card.toBranch}', style: const TextStyle(fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Text('Quantity: ${card.quantity} ${card.unitName}', style: const TextStyle(fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Text('Driver Salary: ₹${card.driverSalary}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.green)),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (err, stack) => Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('Error: $err', textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: () => ref.read(tripCardsProvider.notifier).fetchTripCards(),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status, BuildContext context) {
+    Color color;
+    switch (status) {
+      case 'completed':
+        color = Colors.green;
+        break;
+      case 'started':
+        color = Colors.orange;
+        break;
+      default:
+        color = Colors.blue;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+}
