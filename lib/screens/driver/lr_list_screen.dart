@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:infinity_roadlines/providers/trip_sheet_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/lr_provider.dart';
 import 'lr_map_tracker_dialog.dart';
@@ -9,10 +10,7 @@ import 'lr_map_tracker_dialog.dart';
 class LrListScreen extends ConsumerStatefulWidget {
   final String tripId;
 
-  const LrListScreen({
-    super.key,
-    required this.tripId,
-  });
+  const LrListScreen({super.key, required this.tripId});
 
   @override
   ConsumerState<LrListScreen> createState() => _LrListScreenState();
@@ -41,8 +39,13 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
               content: const Text('Are you sure you have delivered this LR?'),
               actions: [
                 TextButton(
-                  onPressed: isSubmitting ? null : () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                  onPressed: isSubmitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
                 ElevatedButton(
                   onPressed: isSubmitting
@@ -50,7 +53,9 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                       : () async {
                           setDialogState(() => isSubmitting = true);
                           try {
-                            await ref.read(lrListProvider.notifier).markLRDelivered(
+                            await ref
+                                .read(lrListProvider.notifier)
+                                .markLRDelivered(
                                   lrId,
                                   tripSheetId: widget.tripId,
                                 );
@@ -60,8 +65,11 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
 
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('LR Marked as Delivered')),
+                              const SnackBar(
+                                content: Text('LR Marked as Delivered'),
+                              ),
                             );
+                            ref.read(tripSheetsProvider.notifier).fetchTripSheets();
                           } catch (e) {
                             if (!dialogContext.mounted) return;
                             Navigator.of(dialogContext).pop();
@@ -69,7 +77,9 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(e.toString().replaceFirst('Exception: ', '')),
+                                content: Text(
+                                  e.toString().replaceFirst('Exception: ', ''),
+                                ),
                                 backgroundColor: Colors.red,
                               ),
                             );
@@ -83,7 +93,10 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                       ? const SizedBox(
                           height: 18,
                           width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text('Confirm'),
                 ),
@@ -109,7 +122,9 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
       ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () => ref.read(lrListProvider.notifier).fetchLRs(tripSheetId: widget.tripId),
+          onRefresh: () => ref
+              .read(lrListProvider.notifier)
+              .fetchLRs(tripSheetId: widget.tripId),
           child: lrsAsync.when(
             data: (lrs) {
               if (lrs.isEmpty) {
@@ -119,7 +134,10 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                     Center(
                       child: Text(
                         'No LRs assigned or found.',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
                     ),
                   ],
@@ -131,7 +149,8 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                 itemCount: lrs.length,
                 itemBuilder: (context, index) {
                   final lr = lrs[index];
-                  final isPending = lr.status.toLowerCase() != 'delivered' && lr.status.toLowerCase() != 'pending';
+                  final isPending = lr.status.toLowerCase() != 'delivered';
+                  // && lr.status.toLowerCase() != 'pending';
 
                   return Card(
                     elevation: 3,
@@ -139,7 +158,9 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                       side: BorderSide(
-                        color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withOpacity(0.3),
                         width: 1.0,
                       ),
                     ),
@@ -153,37 +174,88 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                             children: [
                               Text(
                                 'LR: ${lr.lrNumber}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
                               ),
                               _buildStatusBadge(lr.status),
                             ],
                           ),
                           const Divider(height: 24),
-                          Text('Date: ${lr.entryDate}', style: const TextStyle(fontSize: 14)),
+                          Text(
+                            'Date: ${lr.entryDate}',
+                            style: const TextStyle(fontSize: 14),
+                          ),
                           const SizedBox(height: 6),
-                          Text('Consignor: ${lr.consignorName}', style: const TextStyle(fontSize: 14)),
+                          Text(
+                            'Consignor: ${lr.consignorName}',
+                            style: const TextStyle(fontSize: 14),
+                          ),
                           const SizedBox(height: 6),
-                          Text('Consignee: ${lr.consigneeName}', style: const TextStyle(fontSize: 14)),
+                          Text(
+                            'Consignee: ${lr.consigneeName}',
+                            style: const TextStyle(fontSize: 14),
+                          ),
                           const SizedBox(height: 6),
-                          Text('Route: ${lr.fromBranch}  ➔  ${lr.toBranch}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                          Text(
+                            'Route: ${lr.fromBranch}  ➔  ${lr.toBranch}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (lr.weight.toString() != "")
                           const SizedBox(height: 6),
+
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Text('Quantity: ${lr.quantity} ${lr.unitName}', style: const TextStyle(fontSize: 14)),
-                              Text('Amount: ₹${lr.amount}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green)),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (lr.weight.toString() != "")
+                                      Text(
+                                        'Weight: ${lr.weight}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    if (lr.quantity.toString() != "")
+                                      const SizedBox(height: 6),
+                                    if (lr.quantity.toString() != "")
+                                      Text(
+                                        'Quantity: ${lr.quantity} ${lr.unitName}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                'Amount: ₹${lr.amount}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
                             ],
                           ),
-                          
+
                           if (isPending) ...[
                             const SizedBox(height: 16),
                             (() {
-                              final currentLocation = ref.watch(driverCurrentLocationProvider);
-                              bool hasValidDestination = lr.receiverLat != 0.0 && lr.receiverLng != 0.0;
+                              final currentLocation = ref.watch(
+                                driverCurrentLocationProvider,
+                              );
+                              bool hasValidDestination =
+                                  lr.receiverLat != 0.0 &&
+                                  lr.receiverLng != 0.0;
                               double distanceInMeters = 0.0;
                               bool isWithinRange = false;
 
-                              if (hasValidDestination && currentLocation != null) {
+                              if (hasValidDestination &&
+                                  currentLocation != null) {
                                 distanceInMeters = Geolocator.distanceBetween(
                                   currentLocation.latitude,
                                   currentLocation.longitude,
@@ -197,20 +269,27 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                                 return Opacity(
                                   opacity: 0.6,
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
                                     children: [
                                       ElevatedButton.icon(
                                         onPressed: null,
                                         icon: const Icon(Icons.location_off),
                                         label: const Text('Delivered'),
                                         style: ElevatedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 6),
                                       const Text(
                                         'Destination location unavailable.',
-                                        style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13),
+                                        style: TextStyle(
+                                          color: Colors.red,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
                                         textAlign: TextAlign.center,
                                       ),
                                     ],
@@ -223,52 +302,68 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                                       Opacity(
                                         opacity: 0.6,
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
                                           children: [
                                             ElevatedButton.icon(
                                               onPressed: null,
                                               icon: const Icon(Icons.block),
                                               label: const Text('Delivered'),
                                               style: ElevatedButton.styleFrom(
-                                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 12,
+                                                    ),
                                               ),
                                             ),
                                             const SizedBox(height: 6),
                                             const Text(
                                               'You must reach the destination before marking this LR as Delivered.',
-                                              style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13),
+                                              style: TextStyle(
+                                                color: Colors.orange,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
                                               textAlign: TextAlign.center,
                                             ),
                                             Text(
                                               'Distance to destination: ${distanceInMeters >= 1000 ? '${(distanceInMeters / 1000).toStringAsFixed(1)} km' : '${distanceInMeters.toStringAsFixed(0)} meters'}',
-                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
                                               textAlign: TextAlign.center,
                                             ),
                                           ],
                                         ),
-                                      )
+                                      ),
                                     ] else ...[
                                       SizedBox(
                                         width: double.infinity,
                                         child: ElevatedButton.icon(
-                                          onPressed: () => _showDeliveryConfirmationDialog(lr.lrId),
+                                          onPressed: () =>
+                                              _showDeliveryConfirmationDialog(
+                                                lr.lrId,
+                                              ),
                                           icon: const Icon(Icons.check_circle),
                                           label: const Text('Delivered'),
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.green,
                                             foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 12),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
                                           ),
                                         ),
-                                      )
+                                      ),
                                     ],
-                                    const SizedBox(height: 12),
+                                    /*const SizedBox(height: 12),
                                     SizedBox(
                                       width: double.infinity,
                                       child: OutlinedButton.icon(
                                         onPressed: currentLocation == null ? null : () => showLrMapTrackerSheet(
                                           context: context, 
-                                          driverLocation: currentLocation!, 
+                                          driverLocation: currentLocation, 
                                           lr: lr
                                         ),
                                         icon: const Icon(Icons.map_outlined),
@@ -278,7 +373,7 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                                           side: BorderSide(color: Theme.of(context).colorScheme.primary),
                                         ),
                                       ),
-                                    ),
+                                    ),*/
                                   ],
                                 );
                               }
@@ -298,10 +393,16 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('Error: $err', textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                    Text(
+                      'Error: $err',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.red),
+                    ),
                     const SizedBox(height: 16),
                     ElevatedButton.icon(
-                      onPressed: () => ref.read(lrListProvider.notifier).fetchLRs(tripSheetId: widget.tripId),
+                      onPressed: () => ref
+                          .read(lrListProvider.notifier)
+                          .fetchLRs(tripSheetId: widget.tripId),
                       icon: const Icon(Icons.refresh),
                       label: const Text('Retry'),
                     ),
@@ -318,7 +419,7 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
   Widget _buildStatusBadge(String status) {
     final isDelivered = status.toLowerCase() == 'delivered';
     final color = isDelivered ? Colors.green : Colors.orange;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -328,7 +429,11 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
       ),
       child: Text(
         status.toUpperCase(),
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

@@ -28,7 +28,7 @@ class LRModel {
   final String address;
   final double toPay;
   final int qty;
-  final double weight;
+  final String weight;
   final double cooly;
   final double account;
   final double paid;
@@ -53,7 +53,7 @@ class LRModel {
     this.amount = '',
     this.status = '',
     this.billType = '',
-    
+
     // Default legacy fields
     this.deliveryStatus = 'pending',
     this.destination = '',
@@ -66,7 +66,7 @@ class LRModel {
     this.address = '',
     this.toPay = 0.0,
     this.qty = 0,
-    this.weight = 0.0,
+    this.weight = "",
     this.cooly = 0.0,
     this.account = 0.0,
     this.paid = 0.0,
@@ -89,14 +89,27 @@ class LRModel {
       toBranchId: json['to_branch_id']?.toString() ?? '',
       toBranch: json['to_branch']?.toString() ?? '',
       quantity: json['quantity']?.toString() ?? '',
+      weight: json['weight']?.toString()??'',
       unitName: json['unit_name']?.toString() ?? '',
       amount: json['amount']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       billType: json['bill_type']?.toString() ?? '',
-      
-      // Parse destination coordinates dynamically 
-      receiverLat: double.tryParse(json['destination_latitude']?.toString() ?? json['receiver_lat']?.toString() ?? '') ?? 0.0,
-      receiverLng: double.tryParse(json['destination_longitude']?.toString() ?? json['receiver_lng']?.toString() ?? '') ?? 0.0,
+
+      // Parse destination coordinates dynamically
+      receiverLat:
+          double.tryParse(
+            json['destination_latitude']?.toString() ??
+                json['receiver_lat']?.toString() ??
+                '',
+          ) ??
+          0.0,
+      receiverLng:
+          double.tryParse(
+            json['destination_longitude']?.toString() ??
+                json['receiver_lng']?.toString() ??
+                '',
+          ) ??
+          0.0,
     );
   }
 

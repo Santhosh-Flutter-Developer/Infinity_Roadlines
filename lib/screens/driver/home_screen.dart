@@ -67,335 +67,335 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              color: isGpsEnabled
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : Colors.red.shade100,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Icon(
-                    isGpsEnabled ? Icons.gps_fixed : Icons.gps_off,
-                    color: isGpsEnabled
-                        ? Theme.of(context).colorScheme.primary
-                        : Colors.red.shade700,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (!isGpsEnabled) ...[
-                          Text(
-                            'GPS Disabled - Please Enable Location Services',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.red.shade900,
-                            ),
-                          ),
-                        ] else if (currentLocation == null) ...[
-                          Text(
-                            'Acquiring Satellite GPS Signal...',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                        ] else ...[
-                          Text(
-                            'GPS Active: Lat ${currentLocation.latitude.toStringAsFixed(4)}, Lng ${currentLocation.longitude.toStringAsFixed(4)}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onPrimaryContainer,
-                            ),
-                          ),
-                          Text(
-                            'Battery: ${currentLocation.battery.toStringAsFixed(0)}% • Syncing Real-Time',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onPrimaryContainer.withOpacity(0.8),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: RefreshIndicator(
+          onRefresh: ()=>ref.read(tripSheetsProvider.notifier).fetchTripSheets(),
+          child: Column(
+            children: [
+              Container(
+                color: isGpsEnabled
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : Colors.red.shade100,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
                   children: [
-                    const Text(
-                      'Active Trip Sheet',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Icon(
+                      isGpsEnabled ? Icons.gps_fixed : Icons.gps_off,
+                      color: isGpsEnabled
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.red.shade700,
                     ),
-                    const SizedBox(height: 12),
-                    tripsAsync.when(
-                      data: (trips) {
-                        if (trips.isEmpty) {
-                          return const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(16.0),
-                              child: Text(
-                                'No Trip Sheet Assigned',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-                        return ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: trips.length,
-                          itemBuilder: (context, index) {
-                            final trip = trips[index];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              elevation: 4,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                side: BorderSide(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.outline.withOpacity(0.5),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          trip.tripNo,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18,
-                                          ),
-                                        ),
-                                        _buildStatusBadge(
-                                          trip.acknowledgementStatus,
-                                          context,
-                                        ),
-                                      ],
-                                    ),
-                                    const Divider(height: 24),
-                                    Text(
-                                      'Trip Date: ${trip.date.day.toString().padLeft(2, '0')}-${trip.date.month.toString().padLeft(2, '0')}-${trip.date.year}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Vehicle Number: ${trip.vehicleNumber}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Driver Name: ${trip.driverName}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Destination: ${trip.toStops.join(" ➔ ")}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'LR Count: ${trip.totalLR}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 4),
-
-                                    if (trip.remarks.isNotEmpty) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Remarks: ${trip.remarks}',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontStyle: FontStyle.italic,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                    const SizedBox(height: 16),
-                                    _TripActionSection(trip: trip),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                      loading: () =>
-                          const Center(child: CircularProgressIndicator()),
-                      error: (err, stack) => Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (!isGpsEnabled) ...[
                             Text(
-                              'Error: $err',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.red),
+                              'GPS Disabled - Please Enable Location Services',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red.shade900,
+                              ),
                             ),
-                            const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              onPressed: () => ref
-                                  .read(tripSheetsProvider.notifier)
-                                  .fetchTripSheets(),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Retry'),
+                          ] else if (currentLocation == null) ...[
+                            Text(
+                              'Acquiring Satellite GPS Signal...',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ] else ...[
+                            Text(
+                              'GPS Active: Lat ${currentLocation.latitude.toStringAsFixed(4)}, Lng ${currentLocation.longitude.toStringAsFixed(4)}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                            Text(
+                              'Battery: ${currentLocation.battery.toStringAsFixed(0)}% • Syncing Real-Time',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                              ),
                             ),
                           ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Trip Cards',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    tripCardsAsync.when(
-                      data: (cards) {
-                        if (cards.isEmpty) {
-                          return const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(16.0),
-                              child: Text(
-                                'No Trip Cards Assigned',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-                        return ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: cards.length,
-                          itemBuilder: (context, index) {
-                            final card = cards[index];
-                            return Card(
-                              elevation: 4,
-                              margin: const EdgeInsets.only(bottom: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                side: BorderSide(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.outline.withOpacity(0.5),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Trip Card: ${card.tripCardNumber}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 18,
-                                      ),
-                                    ),
-                                    const Divider(height: 24),
-                                    Text(
-                                      'Date: ${card.entryDate.day.toString().padLeft(2, '0')}-${card.entryDate.month.toString().padLeft(2, '0')}-${card.entryDate.year}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Vehicle Check: ${card.vehicleNumber}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Driver Name: ${card.driverName}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Route: ${card.fromBranch} ➔ ${card.toBranch}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Quantity: ${card.quantity} ${card.unitName}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Driver Salary: ₹${card.driverSalary}',
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.green,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                      loading: () =>
-                          const Center(child: CircularProgressIndicator()),
-                      error: (err, stack) => Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Error: $err',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.red),
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              onPressed: () => ref
-                                  .read(tripCardsProvider.notifier)
-                                  .fetchTripCards(),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Retry'),
-                            ),
-                          ],
-                        ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Active Trip Sheet',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      tripsAsync.when(
+                        data: (trips) {
+                          if (trips.isEmpty) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Text(
+                                  'No Trip Sheet Assigned',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          return ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: trips.length,
+                            itemBuilder: (context, index) {
+                              final trip = trips[index];
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                elevation: 4,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outline.withOpacity(0.5),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            trip.tripNo,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 18,
+                                            ),
+                                          ),
+                                          _buildStatusBadge(trip.status, context),
+                                        ],
+                                      ),
+                                      const Divider(height: 24),
+                                      Text(
+                                        'Trip Date: ${trip.date.day.toString().padLeft(2, '0')}-${trip.date.month.toString().padLeft(2, '0')}-${trip.date.year}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Vehicle Number: ${trip.vehicleNumber}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Driver Name: ${trip.driverName}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Destination: ${trip.toStops.join(" ➔ ")}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'LR Count: ${trip.totalLR}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+          
+                                      if (trip.remarks.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Remarks: ${trip.remarks}',
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontStyle: FontStyle.italic,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ],
+                                      const SizedBox(height: 16),
+                                      _TripActionSection(trip: trip),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (err, stack) => Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Error: $err',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.red),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: () => ref
+                                    .read(tripSheetsProvider.notifier)
+                                    .fetchTripSheets(),
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      /*const SizedBox(height: 24),
+                      const Text(
+                        'Trip Cards',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      tripCardsAsync.when(
+                        data: (cards) {
+                          if (cards.isEmpty) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Text(
+                                  'No Trip Cards Assigned',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          return ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: cards.length,
+                            itemBuilder: (context, index) {
+                              final card = cards[index];
+                              return Card(
+                                elevation: 4,
+                                margin: const EdgeInsets.only(bottom: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outline.withOpacity(0.5),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Trip Card: ${card.tripCardNumber}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 18,
+                                        ),
+                                      ),
+                                      const Divider(height: 24),
+                                      Text(
+                                        'Date: ${card.entryDate.day.toString().padLeft(2, '0')}-${card.entryDate.month.toString().padLeft(2, '0')}-${card.entryDate.year}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Vehicle Check: ${card.vehicleNumber}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Driver Name: ${card.driverName}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Route: ${card.fromBranch} ➔ ${card.toBranch}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Quantity: ${card.quantity} ${card.unitName}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Driver Salary: ₹${card.driverSalary}',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.green,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (err, stack) => Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Error: $err',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.red),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: () => ref
+                                    .read(tripCardsProvider.notifier)
+                                    .fetchTripCards(),
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),*/
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -423,7 +423,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
 
 Color _acknowledgementColor(String acknowledgementStatus) {
   switch (acknowledgementStatus.toLowerCase()) {
-    case 'accepted':
+    case 'completed':
       return Colors.green;
     case 'rejected':
       return Colors.red;
@@ -497,7 +497,7 @@ class _TripActionSectionState extends ConsumerState<_TripActionSection> {
     // }
 
     // Awaiting driver's decision -> show Accept / Reject.
-    if (ackStatus == 'pending') {
+    /*if (ackStatus == 'pending') {
       if (_isSubmitting) {
         return const Padding(
           padding: EdgeInsets.symmetric(vertical: 8),
@@ -529,10 +529,10 @@ class _TripActionSectionState extends ConsumerState<_TripActionSection> {
           ),
         ],
       );
-    }
+    }*/
 
     // Driver rejected the trip -> no action button, the status text above is enough.
-    if (ackStatus == 'rejected') {
+    /*if (ackStatus == 'rejected') {
       // return const SizedBox.shrink();
       return SizedBox(
         width: double.infinity,
@@ -551,24 +551,24 @@ class _TripActionSectionState extends ConsumerState<_TripActionSection> {
               ),
             )
       );
-    }
+    }*/
 
     // Accepted -> normal Start Trip / View Trip Sheet flow.
     return SizedBox(
       width: double.infinity,
       child: Consumer(
         builder: (context, ref, child) {
-          final selectedTripId = ref.watch(selectedTripIdProvider);
-          final lrsAsync = ref.watch(lrListProvider);
-          bool allDelivered = false;
-          if (selectedTripId == trip.tripId &&
-              lrsAsync.value != null &&
-              lrsAsync.value!.isNotEmpty) {
-            allDelivered = lrsAsync.value!.every(
-              (lr) => lr.status.toLowerCase() == 'delivered',
-            );
-          }
-          final displayStatus = allDelivered ? 'completed' : tripStatus;
+          // final selectedTripId = ref.watch(selectedTripIdProvider);
+          // final lrsAsync = ref.watch(lrListProvider);
+          // bool allDelivered = false;
+          // if (selectedTripId == trip.tripId &&
+          //     lrsAsync.value != null &&
+          //     lrsAsync.value!.isNotEmpty) {
+          //   allDelivered = lrsAsync.value!.every(
+          //     (lr) => lr.status.toLowerCase() == 'delivered',
+          //   );
+          // }
+          // final displayStatus = allDelivered ? 'completed' : tripStatus;
 
           return ElevatedButton(
             onPressed: () {
@@ -581,17 +581,18 @@ class _TripActionSectionState extends ConsumerState<_TripActionSection> {
               context.go('/driver/trips/${trip.tripId}');
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: tripStatus == 'completed'
-                  ? Colors.green
-                  : Theme.of(context).colorScheme.primary,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              // backgroundColor: tripStatus == 'completed'
+              //     ? Colors.green
+              //     : Theme.of(context).colorScheme.primary,
               foregroundColor: Colors.white,
             ),
             child: Text(
-              tripStatus == 'completed'
-                  ? 'Completed'
-                  : (tripStatus == 'pending'
-                        ? 'Start Trip'
-                        : 'View Trip Sheet'),
+              // tripStatus == 'completed'
+              //     ? 
+                  'View Trip Sheet'
+                  // :  'Start Trip'
+                       ,
             ),
           );
         },
