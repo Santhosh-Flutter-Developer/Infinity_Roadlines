@@ -2,13 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/location_provider.dart';
-
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/location_provider.dart';
 import '../../providers/driver_profile_provider.dart';
 
 class DriverProfileScreen extends ConsumerStatefulWidget {
@@ -89,10 +82,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                         profile.safeDriverName,
                         style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
-                      Text(
-                        '@${profile.safeDriverId}',
-                        style: const TextStyle(color: Colors.grey),
-                      ),
+                      // Text(
+                      //   '@${profile.safeDriverId}',
+                      //   style: const TextStyle(color: Colors.grey),
+                      // ),
                       const SizedBox(height: 16),
                       const Divider(),
                       _buildProfileItem(Icons.phone, 'Mobile Number', profile.safeDriverNumber),
