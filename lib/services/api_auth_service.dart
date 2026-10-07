@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:developer';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -59,7 +58,8 @@ class ApiAuthService implements AuthService {
 
     try {
       final response = await _dio.post(
-        'https://thetransporters.in/api/login.php',
+        // 'https://thetransporters.in/api/login.php', ///LIVE URL
+        "https://sriseosolutions.com/mahendran/infinity_roadlines/api/login.php", ///DEV URL
         data: {
           'username': username,
           'password': password,
@@ -114,7 +114,6 @@ class ApiAuthService implements AuthService {
         await prefs.setString('username', loginId);
         await prefs.setString('token', token);
         await prefs.setString('role', roleName.toLowerCase());
-log("Awesome 1");
         _currentUser = UserModel(
           uid: userId,
           role: roleName.toLowerCase(),
@@ -125,40 +124,30 @@ log("Awesome 1");
           battery: 100.0,
           internetConnected: true,
         );
-        log("Awesome 2");
         _authStateController.add(_currentUser);
-        log("Awesome 3");
         return _currentUser;
       }
 
       // status == false, or missing entirely -> treat as a rejected login.
-      log("Awesome 4");
       final message = data['message']?.toString();
-      log("Awesome 5");
       final reason = (data['reason'] ?? data['error_code'])?.toString().toLowerCase();
-      log("Awesome 6");
       final lowerMsg = message?.toLowerCase() ?? '';
-log("Awesome 7");
       final isDeviceIssue = reason == 'device_not_authorized' ||
           reason == 'device_mismatch' ||
           lowerMsg.contains('device');
-log("Awesome 8");
       if (isDeviceIssue) {
         throw DeviceNotAuthorizedException(
           message ?? 'This device is not authorized for this account.',
         );
       }
-log("Awesome 9");
       throw InvalidCredentialsException(
         message ?? 'Invalid username or password.',
       );
     } on DioException catch (e) {
-      log("Awesome 10");
       throw _mapDioException(e);
     } on AuthException {
       rethrow;
     } catch (e) {
-      log("Awesome 11");
       throw UnknownAuthException(e.toString());
     }
   }

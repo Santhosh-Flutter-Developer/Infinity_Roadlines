@@ -1,5 +1,3 @@
-import 'dart:developer';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,17 +21,13 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/login',
     redirect: (context, state) {
       final user = authState.value;
-      log("user Buddy1: $user");
       final loggingIn = state.matchedLocation == '/login';
 
       if (user == null) {
         return loggingIn ? null : '/login';
       }
 
-      log("user Buddy2: $loggingIn");
-
       if (loggingIn) {
-        log("user Buddy3: ${user.role}");
         if (user.role.toString().toLowerCase() == 'driver') {
           return '/driver';
         } else if (user.role.toString().toLowerCase() == 'admin') {

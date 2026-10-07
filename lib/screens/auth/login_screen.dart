@@ -1,4 +1,3 @@
-import 'dart:developer';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,17 +34,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
       return;
     }
-    log("Check Buddy: 1");
     final success = await ref
         .read(authNotifierProvider.notifier)
         .login(username, password);
-        log("Check Buddy: 2");
     if (!mounted) return;
-log("Check Buddy: 3");
     if (success) {
-      log("Check Buddy: 4");
       ref.read(tripSheetsProvider.notifier).fetchTripSheets();
-      log("Check Buddy: 5");
     } else {
       if (!mounted) return;
       final error = ref.read(authNotifierProvider).error;

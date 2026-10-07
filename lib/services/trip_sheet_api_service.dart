@@ -4,8 +4,10 @@ import '../models/trip_sheet_model.dart';
 
 class TripSheetApiService {
   final Dio _dio = Dio();
-  final String _baseUrl = 'https://thetransporters.in/api/get_trip_sheet_list.php';
-  final String _acknowledgementUrl = 'https://thetransporters.in/api/driver_acknowledgement.php';
+  // final String _baseUrl = 'https://thetransporters.in/api/get_trip_sheet_list.php'; ///LIVE URL
+  // final String _acknowledgementUrl = 'https://thetransporters.in/api/driver_acknowledgement.php'; ///LIVE URL
+    final String _baseUrl = 'https://sriseosolutions.com/mahendran/infinity_roadlines/api/get_trip_sheet_list.php'; ///DEV URL
+  final String _acknowledgementUrl = 'https://sriseosolutions.com/mahendran/infinity_roadlines/api/driver_acknowledgement.php'; ///DEV URL
 
   Future<List<TripSheetModel>> fetchTripSheets({
     String fromDate = '',
