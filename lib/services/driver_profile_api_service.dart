@@ -4,7 +4,7 @@ import '../models/driver_profile_model.dart';
 
 class DriverProfileApiService {
   final Dio _dio = Dio();
-  final String _baseUrl = 'https://sriseosolutions.com/mahendran/infinity_roadlines/api/get_driver_profile.php';
+  final String _baseUrl = 'https://thetransporters.in/api/get_driver_profile.php';
 
   Future<DriverProfileModel> fetchDriverProfile(String driverId) async {
     try {

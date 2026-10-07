@@ -107,7 +107,7 @@ class DriverLocationNotifier {
     
     try {
       await _dio.post(
-        'https://sriseosolutions.com/mahendran/infinity_roadlines/api/update_driver_location.php',
+        'https://thetransporters.in/api/update_driver_location.php',
         data: payload,
         options: Options(
           headers: {

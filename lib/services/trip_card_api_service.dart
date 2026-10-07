@@ -4,7 +4,7 @@ import '../models/trip_card_model.dart';
 
 class TripCardApiService {
   final Dio _dio = Dio();
-  final String _baseUrl = 'https://sriseosolutions.com/mahendran/infinity_roadlines/api/get_trip_card_list.php';
+  final String _baseUrl = 'https://thetransporters.in/api/get_trip_card_list.php';
 
   Future<List<TripCardModel>> fetchTripCards({
     String fromDate = '',

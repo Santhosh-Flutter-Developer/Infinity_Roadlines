@@ -1,8 +1,10 @@
+import 'dart:developer';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/trip_sheet_provider.dart';
+import '../../services/auth_exceptions.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -33,19 +35,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
       return;
     }
-
-    final success = await ref.read(authNotifierProvider.notifier).login(username, password);
+    log("Check Buddy: 1");
+    final success = await ref
+        .read(authNotifierProvider.notifier)
+        .login(username, password);
+        log("Check Buddy: 2");
     if (!mounted) return;
-
+log("Check Buddy: 3");
     if (success) {
+      log("Check Buddy: 4");
       ref.read(tripSheetsProvider.notifier).fetchTripSheets();
+      log("Check Buddy: 5");
     } else {
+      if (!mounted) return;
       final error = ref.read(authNotifierProvider).error;
-      final errorMsg = error != null 
-          ? error.toString().replaceAll('Exception: ', '') 
-          : 'Invalid username or password.';
+      final errorMsg = error is AuthException
+          ? error.message
+          : (error?.toString() ?? 'Invalid username or password.');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorMsg)),
+        SnackBar(
+          content: Text(errorMsg),
+          backgroundColor: error is NetworkException || error is ServerException
+              ? Colors.orange.shade800
+              : Colors.red.shade700,
+        ),
       );
     }
   }
@@ -69,9 +82,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: SingleChildScrollView(
               child: Card(
                 elevation: 8,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 32.0,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -84,7 +102,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       Text(
                         'Trip Sheet Tracker',
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: Theme.of(context).colorScheme.primary,
                             ),
@@ -92,9 +111,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       Text(
                         'Logistics & GPS Tracking',
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey,
-                            ),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
                       ),
                       const SizedBox(height: 32),
                       TextField(
@@ -114,8 +133,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           labelText: 'Password',
                           prefixIcon: const Icon(Icons.lock),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscureText ? Icons.visibility : Icons.visibility_off),
-                            onPressed: () => setState(() => _obscureText = !_obscureText),
+                            icon: Icon(
+                              _obscureText
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                            ),
+                            onPressed: () =>
+                                setState(() => _obscureText = !_obscureText),
                           ),
                           border: const OutlineInputBorder(),
                         ),
@@ -126,15 +150,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onPressed: authState.isLoading ? null : _handleLogin,
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                         child: authState.isLoading
                             ? const SizedBox(
                                 height: 20,
                                 width: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
-                            : const Text('Login', style: TextStyle(fontSize: 16)),
+                            : const Text(
+                                'Login',
+                                style: TextStyle(fontSize: 16),
+                              ),
                       ),
                       // const SizedBox(height: 32),
                       // const Divider(),
@@ -183,7 +214,8 @@ class AnimatedTruckWithParcel extends StatefulWidget {
   });
 
   @override
-  State<AnimatedTruckWithParcel> createState() => _AnimatedTruckWithParcelState();
+  State<AnimatedTruckWithParcel> createState() =>
+      _AnimatedTruckWithParcelState();
 }
 
 class _AnimatedTruckWithParcelState extends State<AnimatedTruckWithParcel>

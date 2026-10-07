@@ -4,8 +4,8 @@ import '../models/lr_model.dart';
 
 class LRApiService {
   final Dio _dio = Dio();
-  final String _baseUrl = 'https://sriseosolutions.com/mahendran/infinity_roadlines/api/get_lr_list.php';
-  final String _deliveryStatusUrl = 'https://sriseosolutions.com/mahendran/infinity_roadlines/api/update_lr_delivery_status.php';
+  final String _baseUrl = 'https://thetransporters.in/api/get_lr_list.php';
+  final String _deliveryStatusUrl = 'https://thetransporters.in/api/update_lr_delivery_status.php';
 
   Future<List<LRModel>> fetchLRList({
     String tripSheetId = '',

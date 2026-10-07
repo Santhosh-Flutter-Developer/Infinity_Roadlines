@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +7,6 @@ import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/driver/home_screen.dart';
-import 'screens/driver/lr_destination_list_screen.dart';
 import 'screens/driver/lr_list_screen.dart';
 import 'screens/driver/lr_detail_screen.dart';
 import 'screens/driver/profile_screen.dart';
@@ -22,16 +23,20 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/login',
     redirect: (context, state) {
       final user = authState.value;
+      log("user Buddy1: $user");
       final loggingIn = state.matchedLocation == '/login';
 
       if (user == null) {
         return loggingIn ? null : '/login';
       }
 
+      log("user Buddy2: $loggingIn");
+
       if (loggingIn) {
-        if (user.role == 'driver') {
+        log("user Buddy3: ${user.role}");
+        if (user.role.toString().toLowerCase() == 'driver') {
           return '/driver';
-        } else if (user.role == 'admin') {
+        } else if (user.role.toString().toLowerCase() == 'admin') {
           return '/admin';
         }
       }
@@ -39,10 +44,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/driver',
         builder: (context, state) => const DriverHomeScreen(),

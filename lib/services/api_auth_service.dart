@@ -1,12 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import 'auth_service.dart';
+import 'auth_exceptions.dart';
+import 'device_id_service.dart';
 
 class ApiAuthService implements AuthService {
-  final Dio _dio = Dio();
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
+      sendTimeout: const Duration(seconds: 15),
+    ),
+  );
   final _authStateController = StreamController<UserModel?>.broadcast();
   UserModel? _currentUser;
 
@@ -36,12 +46,24 @@ class ApiAuthService implements AuthService {
 
   @override
   Future<UserModel?> login(String username, String password) async {
+    late final String deviceId;
+    try {
+      deviceId = await DeviceIdService.getDeviceId();
+    } catch (_) {
+      // Device id storage failed (rare). Login can't proceed safely
+      // without it since the backend expects it on every request.
+      throw const UnknownAuthException(
+        'Could not prepare this device for login. Please restart the app and try again.',
+      );
+    }
+
     try {
       final response = await _dio.post(
-        'https://sriseosolutions.com/mahendran/infinity_roadlines/api/login.php',
+        'https://thetransporters.in/api/login.php',
         data: {
           'username': username,
           'password': password,
+          'device_id': deviceId,
         },
         options: Options(
           headers: {
@@ -51,63 +73,153 @@ class ApiAuthService implements AuthService {
         ),
       );
 
-      print('response.statusCode: ${response.statusCode}');
-      print('response.body: ${response.data}');
-
       var data = response.data;
       if (data is String) {
-        data = jsonDecode(data);
-      }
-
-      if (data is Map<String, dynamic>) {
-        if (data['status'] == true) {
-          final responseData = data['data'];
-          if (responseData != null) {
-            final userId = responseData['user_id']?.toString() ?? '';
-            final name = responseData['user_name']?.toString() ?? 'Driver';
-            final loginId = responseData['login_id']?.toString() ?? username;
-            final userMobile = responseData['user_mobile']?.toString() ?? '';
-            final roleName = responseData['role_name']?.toString() ?? 'Driver';
-            final token = responseData['token']?.toString() ?? '';
-
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('user_id', userId);
-            await prefs.setString('name', name);
-            await prefs.setString('username', loginId);
-            await prefs.setString('token', token); 
-            await prefs.setString('role', roleName.toLowerCase());
-
-            _currentUser = UserModel(
-               uid: userId,
-               role: roleName.toLowerCase(),
-               name: name,
-               username: loginId,
-               phone: userMobile,
-               status: 'online',
-               battery: 100.0,
-               internetConnected: true,
-            );
-            _authStateController.add(_currentUser);
-            return _currentUser;
-          } else {
-            throw Exception(data['message'] ?? 'Login failed');
-          }
-        } else if (data['status'] == false) {
-          throw Exception(data['message'] ?? 'Login failed');
-        } else {
-          throw Exception('Invalid API response format. Status: ${response.statusCode}, Body: ${response.data}');
+        try {
+          data = jsonDecode(data);
+        } on FormatException {
+          throw ServerException(
+            'The server returned an unexpected response. Please try again later.',
+            statusCode: response.statusCode,
+          );
         }
-      } else {
-        throw Exception('Invalid API response format. Status: ${response.statusCode}, Body: ${response.data}');
       }
+
+      if (data is! Map<String, dynamic>) {
+        throw ServerException(
+          'The server returned an unexpected response. Please try again later.',
+          statusCode: response.statusCode,
+        );
+      }
+
+      if (data['status'] == true) {
+        final responseData = data['data'];
+        if (responseData == null) {
+          throw ServerException(
+            data['message']?.toString() ?? 'Login failed. Please try again.',
+            statusCode: response.statusCode,
+          );
+        }
+
+        final userId = responseData['user_id']?.toString() ?? '';
+        final name = responseData['user_name']?.toString() ?? 'Driver';
+        final loginId = responseData['login_id']?.toString() ?? username;
+        final userMobile = responseData['user_mobile']?.toString() ?? '';
+        final roleName = responseData['role_name']?.toString() ?? 'Driver';
+        final token = responseData['token']?.toString() ?? '';
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_id', userId);
+        await prefs.setString('name', name);
+        await prefs.setString('username', loginId);
+        await prefs.setString('token', token);
+        await prefs.setString('role', roleName.toLowerCase());
+log("Awesome 1");
+        _currentUser = UserModel(
+          uid: userId,
+          role: roleName.toLowerCase(),
+          name: name,
+          username: loginId,
+          phone: userMobile,
+          status: 'online',
+          battery: 100.0,
+          internetConnected: true,
+        );
+        log("Awesome 2");
+        _authStateController.add(_currentUser);
+        log("Awesome 3");
+        return _currentUser;
+      }
+
+      // status == false, or missing entirely -> treat as a rejected login.
+      log("Awesome 4");
+      final message = data['message']?.toString();
+      log("Awesome 5");
+      final reason = (data['reason'] ?? data['error_code'])?.toString().toLowerCase();
+      log("Awesome 6");
+      final lowerMsg = message?.toLowerCase() ?? '';
+log("Awesome 7");
+      final isDeviceIssue = reason == 'device_not_authorized' ||
+          reason == 'device_mismatch' ||
+          lowerMsg.contains('device');
+log("Awesome 8");
+      if (isDeviceIssue) {
+        throw DeviceNotAuthorizedException(
+          message ?? 'This device is not authorized for this account.',
+        );
+      }
+log("Awesome 9");
+      throw InvalidCredentialsException(
+        message ?? 'Invalid username or password.',
+      );
     } on DioException catch (e) {
-      if (e.response != null) {
-         throw Exception('Server error: ${e.response?.statusCode}');
-      } else {
-         throw Exception('Network error: Please check your connection.');
-      }
+      log("Awesome 10");
+      throw _mapDioException(e);
+    } on AuthException {
+      rethrow;
     } catch (e) {
-      throw Exception(e.toString());
+      log("Awesome 11");
+      throw UnknownAuthException(e.toString());
+    }
+  }
+
+  AuthException _mapDioException(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return const NetworkException(
+          'The connection timed out. Please try again.',
+        );
+      case DioExceptionType.connectionError:
+        return const NetworkException(
+          'Please check your internet connection and try again.',
+        );
+      case DioExceptionType.badCertificate:
+        return const NetworkException(
+          'Could not establish a secure connection. Please try again.',
+        );
+      case DioExceptionType.cancel:
+        return const UnknownAuthException('Login was cancelled.');
+      case DioExceptionType.badResponse:
+        final statusCode = e.response?.statusCode;
+        String? serverMessage;
+        final body = e.response?.data;
+        try {
+          final parsed = body is String ? jsonDecode(body) : body;
+          if (parsed is Map<String, dynamic>) {
+            serverMessage = parsed['message']?.toString();
+          }
+        } catch (_) {
+          // ignore parse failures, fall back below
+        }
+
+        if (statusCode == 401 || statusCode == 403) {
+          return InvalidCredentialsException(
+            serverMessage ?? 'Invalid username or password.',
+          );
+        }
+        if (statusCode != null && statusCode >= 500) {
+          return ServerException(
+            serverMessage ?? 'Server error. Please try again later.',
+            statusCode: statusCode,
+          );
+        }
+        return ServerException(
+          serverMessage ?? 'Login failed (error $statusCode). Please try again.',
+          statusCode: statusCode,
+        );
+      case DioExceptionType.unknown:
+        if (e.error is SocketException) {
+          return const NetworkException(
+            'Please check your internet connection and try again.',
+          );
+        }
+        return NetworkException(e.message ?? 'Network error. Please try again.');
+      default:
+        // Covers newer DioExceptionType values (e.g. transformTimeout)
+        // added in later dio versions that aren't explicitly handled above.
+        return UnknownAuthException(e.message ?? 'Something went wrong. Please try again.');
     }
   }
 
