@@ -46,6 +46,18 @@ class LRModel {
   final String receivedMobileNumber;
   final String receivedIdentification;
 
+  // Local Tripsheet Topay payment fields. Defaults keep General LRs unchanged.
+  final bool isTopay;
+  final String paymentStatus; // "Pending" / "Paid"
+  final String paymentModeName;
+  final List<String> allowedPaymentModes;
+  final String razorpayPaymentId;
+  final String razorpayQrId;
+  final String razorpayQrUrl;
+  final String qrCodeImageUrl;
+
+  bool get isPaid => paymentStatus.trim().toLowerCase() == 'paid';
+
   LRModel({
     this.lrId = '',
     this.lrNumber = '',
@@ -93,6 +105,14 @@ class LRModel {
     this.receivedPerson = '',
     this.receivedMobileNumber = '',
     this.receivedIdentification = '',
+    this.isTopay = false,
+    this.paymentStatus = 'Pending',
+    this.paymentModeName = '',
+    this.allowedPaymentModes = const [],
+    this.razorpayPaymentId = '',
+    this.razorpayQrId = '',
+    this.razorpayQrUrl = '',
+    this.qrCodeImageUrl = '',
   });
 
   factory LRModel.fromJson(Map<String, dynamic> json) {
@@ -139,6 +159,10 @@ class LRModel {
     DateTime? deliveredAt,
     double? deliveredLat,
     double? deliveredLng,
+    String? paymentStatus,
+    String? paymentMode,
+    String? paymentModeName,
+    String? razorpayPaymentId,
   }) {
     return LRModel(
       lrId: lrId,
@@ -177,12 +201,20 @@ class LRModel {
       consignorPhone: consignorPhone,
       parentTripNumber: parentTripNumber,
       deliveryPin: deliveryPin,
-      paymentMode: paymentMode,
+      paymentMode: paymentMode ?? this.paymentMode,
       collectableAmount: collectableAmount,
       pinNotProvided: pinNotProvided,
       receivedPerson: receivedPerson,
       receivedMobileNumber: receivedMobileNumber,
       receivedIdentification: receivedIdentification,
+      isTopay: isTopay,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      paymentModeName: paymentModeName ?? this.paymentModeName,
+      allowedPaymentModes: allowedPaymentModes,
+      razorpayPaymentId: razorpayPaymentId ?? this.razorpayPaymentId,
+      razorpayQrId: razorpayQrId,
+      razorpayQrUrl: razorpayQrUrl,
+      qrCodeImageUrl: qrCodeImageUrl,
     );
   }
 }

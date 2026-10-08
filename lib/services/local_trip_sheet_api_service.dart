@@ -49,6 +49,26 @@ class LocalTripSheetApiService {
   final String _detailsUrl = '${_apiBase}get_local_trip_sheet_details.php';
   final String _deliveryUrl = '${_apiBase}update_local_lr_delivery.php';
   final String _statusUrl = '${_apiBase}update_local_trip_sheet_status.php';
+  final String _paymentCheckUrl = '${_apiBase}check_lr_payment_status.php';
+  final String _qrUrl = '${_apiBase}get_lr_qr_code.php';
+
+  /// Turns the `qr_code_image_url` the API returns into a loadable URL.
+  /// Absolute URLs are used as-is; relative ones ("api/get_lr_qr_code.php?...")
+  /// are resolved against the site root of the configured API base.
+  static String resolveUrl(String url) {
+    final u = url.trim();
+    if (u.isEmpty) return '';
+    if (u.startsWith('http://') || u.startsWith('https://')) return u;
+    var root = _apiBase;
+    if (root.endsWith('api/')) root = root.substring(0, root.length - 4);
+    final path = u.startsWith('/') ? u.substring(1) : u;
+    return '$root$path';
+  }
+
+  /// Auth headers for loading the QR image itself.
+  Future<Map<String, String>> imageHeaders() async {
+    return {'Authorization': 'Bearer ${await _token()}'};
+  }
 
   Future<String> _token() async {
     final prefs = await SharedPreferences.getInstance();
@@ -73,16 +93,29 @@ class LocalTripSheetApiService {
 
   /// Shared POST + response validation. Returns the decoded JSON map when the
   /// API reports `status == true`; throws [LocalTripApiException] otherwise.
-  Future<Map<String, dynamic>> _post(
+  Future<Map<String, dynamic>> _post(String url, Map<String, dynamic> body) =>
+      _send('POST', url, body: body);
+
+  Future<Map<String, dynamic>> _get(
     String url,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> query,
+  ) =>
+      _send('GET', url, query: query);
+
+  Future<Map<String, dynamic>> _send(
+    String method,
+    String url, {
+    Map<String, dynamic>? body,
+    Map<String, dynamic>? query,
+  }) async {
     final token = await _token();
     try {
-      final response = await _dio.post(
+      final response = await _dio.request(
         url,
-        data: {...body, 'token': token},
+        data: method == 'POST' ? {...?body, 'token': token} : null,
+        queryParameters: query,
         options: Options(
+          method: method,
           headers: {
             'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',
@@ -131,8 +164,9 @@ class LocalTripSheetApiService {
   }
 
   /// POST api/get_local_trip_sheet_list.php
-  Future<List<LocalTripSheet>> fetchLocalTripSheets({
-    String status = 'Dispatched',
+  /// [status] is "Dispatched" or "Completed".
+  Future<LocalTripSheetPage> fetchLocalTripSheetPage({
+    required String status,
     int pageNumber = 1,
     int pageLimit = 20,
   }) async {
@@ -143,12 +177,22 @@ class LocalTripSheetApiService {
       'page_limit': pageLimit,
     });
     final payload = data['data'];
-    final list = payload is Map ? payload['list'] : null;
-    if (list is! List) return [];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(LocalTripSheet.fromJson)
-        .toList();
+    final map = payload is Map<String, dynamic> ? payload : const <String, dynamic>{};
+    final rawList = map['list'];
+    final items = rawList is List
+        ? rawList
+            .whereType<Map<String, dynamic>>()
+            .map(LocalTripSheet.fromJson)
+            .toList()
+        : <LocalTripSheet>[];
+    int asInt(dynamic v) =>
+        v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0;
+    return LocalTripSheetPage(
+      items: items,
+      totalCount: asInt(map['total_count']),
+      pageNumber: asInt(map['page_number']) == 0 ? pageNumber : asInt(map['page_number']),
+      totalPages: asInt(map['total_pages']),
+    );
   }
 
   /// POST api/get_local_trip_sheet_details.php
@@ -200,5 +244,29 @@ class LocalTripSheetApiService {
       'local_trip_number': localTripNumber,
       'status': status,
     });
+  }
+
+  /// POST api/check_lr_payment_status.php
+  ///
+  /// Cash: pass [paymentMode] = "Cash" (the API records the cash payment).
+  /// QR:   leave [paymentMode] null so the API verifies the real QR/UPI payment.
+  ///
+  /// Throws [LocalTripApiException] (with the API message) when `status` is
+  /// false. A `status: true` / `is_paid: false` answer is returned, not thrown.
+  Future<LocalPaymentResult> checkLrPayment({
+    required String lrId,
+    String? paymentMode,
+  }) async {
+    final data = await _post(_paymentCheckUrl, {
+      'lr_id': int.tryParse(lrId) ?? lrId,
+      if (paymentMode != null) 'payment_mode': paymentMode,
+    });
+    return LocalPaymentResult.fromJson(data);
+  }
+
+  /// GET api/get_lr_qr_code.php?lr_id={lr_id}
+  Future<LocalQrInfo> fetchLrQrCode({required String lrId}) async {
+    final data = await _get(_qrUrl, {'lr_id': int.tryParse(lrId) ?? lrId});
+    return LocalQrInfo.fromJson(data);
   }
 }

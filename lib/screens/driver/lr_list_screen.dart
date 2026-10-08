@@ -5,9 +5,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:infinity_roadlines/providers/trip_sheet_provider.dart';
 import '../../models/lr_model.dart';
 import '../../providers/location_provider.dart';
+import '../../providers/local_trip_list_provider.dart';
 import '../../providers/lr_provider.dart';
 import '../../services/local_trip_sheet_api_service.dart';
 import 'local_delivery_dialog.dart';
+import 'local_payment_dialog.dart';
 import 'lr_map_tracker_dialog.dart';
 
 class LrListScreen extends ConsumerStatefulWidget {
@@ -22,10 +24,12 @@ class LrListScreen extends ConsumerStatefulWidget {
 class _LrListScreenState extends ConsumerState<LrListScreen> {
   // tripsheet_type == "local" (read from the saved login session).
   bool _isLocal = false;
+  late final ProviderContainer _container;
 
   @override
   void initState() {
     super.initState();
+    _container = ProviderScope.containerOf(context, listen: false);
     TripsheetType.isLocal().then((value) {
       if (mounted && value != _isLocal) setState(() => _isLocal = value);
     });
@@ -34,12 +38,42 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    // Leaving the LR screen (back button, system back, after a delivery...)
+    // returns to the Tripsheet page, which stays mounted underneath. Drop the
+    // Local lists so they are fetched again from the API.
+    if (_isLocal) {
+      final container = _container;
+      Future.microtask(() => container.invalidate(localTripListProvider));
+    }
+    super.dispose();
+  }
+
+  /// Local Topay payment: dialog -> check_lr_payment_status.php. The LR is only
+  /// marked Paid after the backend confirms `is_paid == true`.
+  Future<void> _showLocalPaymentDialog(LRModel lr) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final lrNotifier = ref.read(lrListProvider.notifier);
+
+    final result = await showLocalPaymentDialog(context: context, lr: lr);
+    if (result == null) return;
+
+    lrNotifier.applyLocalPayment(lr.lrId, result);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          result.message.isNotEmpty ? result.message : 'Payment recorded successfully.',
+        ),
+      ),
+    );
+  }
+
   /// Local Tripsheet delivery: popup -> update_local_lr_delivery.php ->
   /// (only if all_lrs_delivered == true) update_local_trip_sheet_status.php.
   void _showLocalDeliveryDialog(LRModel lr) {
     final messenger = ScaffoldMessenger.of(context);
     final lrNotifier = ref.read(lrListProvider.notifier);
-    final tripSheetsNotifier = ref.read(tripSheetsProvider.notifier);
 
     showLocalDeliveryDialog(
       context: context,
@@ -74,7 +108,6 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                       messenger.showSnackBar(
                         const SnackBar(content: Text('Tripsheet marked as Delivered')),
                       );
-                      tripSheetsNotifier.fetchTripSheets();
                     } else {
                       messenger.showSnackBar(
                         SnackBar(content: Text(error), backgroundColor: Colors.red),
@@ -85,7 +118,8 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
               ),
             );
           }
-          tripSheetsNotifier.fetchTripSheets();
+          // Tripsheet lists (Dispatched/Completed) reload when the home
+          // screen is shown again.
         } catch (e) {
           messenger.showSnackBar(
             SnackBar(
@@ -245,14 +279,26 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                'LR: ${lr.lrNumber}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
+                              Flexible(
+                                child: Text(
+                                  'LR: ${lr.lrNumber}',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
                                 ),
                               ),
-                              _buildStatusBadge(lr.status),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_isLocal && lr.isTopay && lr.isPaid) ...[
+                                    _buildPaidChip(),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  _buildStatusBadge(lr.status),
+                                ],
+                              ),
                             ],
                           ),
                           const Divider(height: 24),
@@ -310,6 +356,22 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                             Text('Payment Mode: ${lr.paymentMode}',
                                 style: const TextStyle(fontSize: 14)),
                           ],
+                          if (_isLocal && lr.isTopay) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'Payment Status: ${lr.isPaid ? 'Paid' : lr.paymentStatus}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: lr.isPaid ? FontWeight.bold : FontWeight.normal,
+                                color: lr.isPaid ? Colors.green : null,
+                              ),
+                            ),
+                          ],
+                          if (_isLocal && lr.isPaid && lr.razorpayPaymentId.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text('Payment ID: ${lr.razorpayPaymentId}',
+                                style: const TextStyle(fontSize: 14)),
+                          ],
                           if (_isLocal && lr.deliveryPin.isNotEmpty) ...[
                             const SizedBox(height: 6),
                             Text('Delivery PIN: ${lr.deliveryPin}',
@@ -357,6 +419,25 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                               ),
                             ],
                           ),
+
+                          // Local Topay: Pay button. Hidden once the backend has
+                          // confirmed the payment (no repeat payments).
+                          if (_isLocal && lr.isTopay && !lr.isPaid) ...[
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () => _showLocalPaymentDialog(lr),
+                                icon: const Icon(Icons.payments),
+                                label: const Text('Pay'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                          ],
 
                           if (isPending) ...[
                             const SizedBox(height: 16),
@@ -528,6 +609,26 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Green "PAID" chip shown next to the delivery badge once payment is confirmed.
+  Widget _buildPaidChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.withOpacity(0.5)),
+      ),
+      child: const Text(
+        'PAID',
+        style: TextStyle(
+          color: Colors.green,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );

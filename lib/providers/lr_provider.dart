@@ -183,6 +183,75 @@ class LRListNotifier extends AsyncNotifier<List<LRModel>> {
     }
   }
 
+  /// Applies a payment the backend has confirmed (`is_paid == true`) to the LR
+  /// right away, then refreshes the tripsheet details in the background so the
+  /// backend (e.g. `total_topay_pending`) stays authoritative. Never touches the
+  /// delivery status: Paid != Delivered.
+  void applyLocalPayment(String lrId, LocalPaymentResult result) {
+    final current = state;
+    if (current is AsyncData<List<LRModel>>) {
+      state = AsyncValue.data(
+        current.value
+            .map((l) => l.lrId == lrId
+                ? l.copyWith(
+                    paymentStatus: 'Paid',
+                    paymentMode:
+                        result.paymentMode.isNotEmpty ? result.paymentMode : null,
+                    razorpayPaymentId: result.razorpayPaymentId.isNotEmpty
+                        ? result.razorpayPaymentId
+                        : null,
+                  )
+                : l)
+            .toList(),
+      );
+    }
+    _refreshLocalDetailsSilently();
+  }
+
+  /// Best-effort background refresh (no loading state, errors ignored). If the
+  /// server hasn't caught up with a just-confirmed payment/delivery, the
+  /// confirmed local value is kept.
+  Future<void> _refreshLocalDetailsSilently() async {
+    final trip = _localTripNumber;
+    if (trip.isEmpty) return;
+    try {
+      final details = await ref
+          .read(localTripSheetApiServiceProvider)
+          .fetchLocalTripSheetDetails(localTripNumber: trip);
+      if (trip != _localTripNumber) return; // user opened another tripsheet
+
+      ref.read(localTripSheetDetailsProvider.notifier).state = details;
+
+      final current = state;
+      if (current is! AsyncData<List<LRModel>>) return;
+      final mine = {for (final l in current.value) l.lrId: l};
+      final merged = details.lrs.map((server) {
+        var lr = server.toLRModel();
+        final local = mine[lr.lrId];
+        if (local != null) {
+          if (local.isPaid && !lr.isPaid) {
+            lr = lr.copyWith(
+              paymentStatus: local.paymentStatus,
+              paymentMode: local.paymentMode,
+              razorpayPaymentId: local.razorpayPaymentId,
+            );
+          }
+          if (local.status.toLowerCase() == 'delivered' &&
+              lr.status.toLowerCase() != 'delivered') {
+            lr = lr.copyWith(
+              status: local.status,
+              deliveryStatus: local.deliveryStatus,
+            );
+          }
+        }
+        return lr;
+      }).toList();
+      state = AsyncValue.data(merged);
+    } catch (_) {
+      // Keep what is on screen; the next manual refresh will resync.
+    }
+  }
+
   void _markLocalLrDelivered(String lrId) {
     final current = state;
     if (current is! AsyncData<List<LRModel>>) return;

@@ -9,6 +9,8 @@ import '../../providers/trip_sheet_provider.dart';
 import '../../providers/trip_card_provider.dart';
 import '../../providers/lr_provider.dart';
 import '../../models/trip_model.dart';
+import '../../services/local_trip_sheet_api_service.dart';
+import 'local_trip_sheet_tabs.dart';
 
 class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
@@ -18,12 +20,24 @@ class DriverHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
+  // null = tripsheet_type not read yet, true = "local", false = "general".
+  bool? _isLocal;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(tripSheetsProvider.notifier).fetchTripSheets();
-      ref.read(tripCardsProvider.notifier).fetchTripCards();
+    TripsheetType.isLocal().then((isLocal) {
+      if (!mounted) return;
+      setState(() => _isLocal = isLocal);
+      // General drivers: exactly the previous behaviour. Local drivers load
+      // their own paged lists inside LocalTripSheetTabs.
+      if (!isLocal) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ref.read(tripSheetsProvider.notifier).fetchTripSheets();
+          ref.read(tripCardsProvider.notifier).fetchTripCards();
+        });
+      }
     });
   }
 
@@ -32,7 +46,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     ref.watch(driverLocationNotifierProvider);
 
     final user = ref.watch(authStateProvider).value;
-    final tripsAsync = ref.watch(driverTripsProvider);
+    // Only the General flow uses the single (non-paged) tripsheet provider.
+    final tripsAsync = _isLocal == false ? ref.watch(driverTripsProvider) : null;
     final tripCardsAsync = ref.watch(driverTripCardsProvider);
     final currentLocation = ref.watch(driverCurrentLocationProvider);
     final themeMode = ref.watch(themeModeProvider);
@@ -134,6 +149,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                   ],
                 ),
               ),
+              if (_isLocal == null)
+                const Expanded(child: Center(child: CircularProgressIndicator()))
+              else if (_isLocal == true)
+                Expanded(
+                  child: LocalTripSheetTabs(cardBuilder: _buildTripCard),
+                )
+              else
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
@@ -148,7 +170,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      tripsAsync.when(
+                      tripsAsync!.when(
                         data: (trips) {
                           if (trips.isEmpty) {
                             return const Center(
@@ -170,81 +192,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                             itemCount: trips.length,
                             itemBuilder: (context, index) {
                               final trip = trips[index];
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                elevation: 4,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  side: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outline.withOpacity(0.5),
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            trip.tripNo,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18,
-                                            ),
-                                          ),
-                                          _buildStatusBadge(trip.status, context),
-                                        ],
-                                      ),
-                                      const Divider(height: 24),
-                                      Text(
-                                        'Trip Date: ${trip.date.day.toString().padLeft(2, '0')}-${trip.date.month.toString().padLeft(2, '0')}-${trip.date.year}',
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Vehicle Number: ${trip.vehicleNumber}',
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Driver Name: ${trip.driverName}',
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Destination: ${trip.toStops.join(" ➔ ")}',
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'LR Count: ${trip.totalLR}',
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-          
-                                      if (trip.remarks.isNotEmpty) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Remarks: ${trip.remarks}',
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            fontStyle: FontStyle.italic,
-                                            color: Colors.grey,
-                                          ),
-                                        ),
-                                      ],
-                                      const SizedBox(height: 16),
-                                      _TripActionSection(trip: trip),
-                                    ],
-                                  ),
-                                ),
-                              );
+                              return _buildTripCard(context, trips[index]);
                             },
                           );
                         },
@@ -401,6 +349,84 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     );
   }
 
+  Widget _buildTripCard(BuildContext context, TripModel trip) {
+    return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                elevation: 4,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outline.withOpacity(0.5),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            trip.tripNo,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 18,
+                                            ),
+                                          ),
+                                          _buildStatusBadge(trip.status, context),
+                                        ],
+                                      ),
+                                      const Divider(height: 24),
+                                      Text(
+                                        'Trip Date: ${trip.date.day.toString().padLeft(2, '0')}-${trip.date.month.toString().padLeft(2, '0')}-${trip.date.year}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Vehicle Number: ${trip.vehicleNumber}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Driver Name: ${trip.driverName}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Destination: ${trip.toStops.join(" ➔ ")}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'LR Count: ${trip.totalLR}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 4),
+          
+                                      if (trip.remarks.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Remarks: ${trip.remarks}',
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontStyle: FontStyle.italic,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ],
+                                      const SizedBox(height: 16),
+                                      _TripActionSection(trip: trip),
+                                    ],
+                                  ),
+                                ),
+                              );
+  }
+
   Widget _buildStatusBadge(String status, BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -424,6 +450,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
 Color _acknowledgementColor(String acknowledgementStatus) {
   switch (acknowledgementStatus.toLowerCase()) {
     case 'completed':
+    case 'delivered':
       return Colors.green;
     case 'rejected':
       return Colors.red;
