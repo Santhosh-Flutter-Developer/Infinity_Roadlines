@@ -23,6 +23,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       final user = authState.value;
       final loggingIn = state.matchedLocation == '/login';
 
+      // Bare "/" (e.g. the error page's Home link) has no route of its own.
+      if (state.matchedLocation == '/') {
+        if (user == null) return '/login';
+        return user.role.toString().toLowerCase() == 'admin' ? '/admin' : '/driver';
+      }
+
       if (user == null) {
         return loggingIn ? null : '/login';
       }

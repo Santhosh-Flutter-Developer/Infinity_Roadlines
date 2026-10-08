@@ -7,6 +7,7 @@ import '../models/user_model.dart';
 import 'auth_service.dart';
 import 'auth_exceptions.dart';
 import 'device_id_service.dart';
+import 'local_trip_sheet_api_service.dart' show TripsheetType;
 
 class ApiAuthService implements AuthService {
   final Dio _dio = Dio(
@@ -101,7 +102,13 @@ class ApiAuthService implements AuthService {
           );
         }
 
-        final userId = responseData['user_id']?.toString() ?? '';
+        final userId =
+            (responseData['user_id'] ?? responseData['userid'])?.toString() ?? '';
+        // "general" (default) or "local". Decides which Tripsheet API the
+        // driver flow uses. Falls back to "general" when absent.
+        final tripsheetType = TripsheetType.normalize(
+          responseData['tripsheet_type'] ?? data['tripsheet_type'],
+        );
         final name = responseData['user_name']?.toString() ?? 'Driver';
         final loginId = responseData['login_id']?.toString() ?? username;
         final userMobile = responseData['user_mobile']?.toString() ?? '';
@@ -114,6 +121,7 @@ class ApiAuthService implements AuthService {
         await prefs.setString('username', loginId);
         await prefs.setString('token', token);
         await prefs.setString('role', roleName.toLowerCase());
+        await prefs.setString(TripsheetType.prefsKey, tripsheetType);
         _currentUser = UserModel(
           uid: userId,
           role: roleName.toLowerCase(),
@@ -212,6 +220,40 @@ class ApiAuthService implements AuthService {
     }
   }
 
+  /// POST api/logout.php with the logged-in driver's id.
+  /// Best effort: a network/server failure must never trap the driver on the
+  /// screen, so errors are swallowed and the local session is still cleared.
+  /// Returns true only when the API confirms (`status == true`).
+  Future<bool> _callLogoutApi(SharedPreferences prefs) async {
+    final driverId = prefs.getString('user_id') ?? '';
+    if (driverId.isEmpty) return false;
+    final token = (prefs.getString('token') ?? '')
+        .trim()
+        .replaceAll('\n', '')
+        .replaceAll('\r', '')
+        .replaceAll('"', '');
+    try {
+      final response = await _dio.post(
+        // 'https://thetransporters.in/api/logout.php', ///LIVE URL
+        'https://sriseosolutions.com/mahendran/infinity_roadlines/api/logout.php', ///DEV URL
+        data: {'driver_id': driverId},
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+      var data = response.data;
+      if (data is String) data = jsonDecode(data);
+      return data is Map && data['status'] == true;
+    } catch (_) {
+      // status:false, timeout, offline, bad JSON -> proceed with local logout.
+      return false;
+    }
+  }
+
   @override
   Future<UserModel?> getCurrentUser() async {
     return _currentUser;
@@ -220,10 +262,16 @@ class ApiAuthService implements AuthService {
   @override
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // Tell the server to clear this driver's device lock. Must run before the
+    // session is wiped because it needs the saved user_id/token.
+    await _callLogoutApi(prefs);
+
     await prefs.remove('user_id');
     await prefs.remove('name');
     await prefs.remove('username');
     await prefs.remove('role');
+    await prefs.remove(TripsheetType.prefsKey);
     _currentUser = null;
     _authStateController.add(null);
   }

@@ -1,14 +1,28 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/lr_model.dart';
+import '../models/local_trip_sheet_model.dart';
 import '../services/lr_api_service.dart';
+import '../services/local_trip_sheet_api_service.dart';
 
 final lrApiServiceProvider = Provider<LRApiService>((ref) {
   return LRApiService();
 });
 
+final localTripSheetApiServiceProvider = Provider<LocalTripSheetApiService>((ref) {
+  return LocalTripSheetApiService();
+});
+
+/// Header/counts of the Local tripsheet currently open in the LR list
+/// (null for General). Counts are kept in sync after each delivery.
+final localTripSheetDetailsProvider = StateProvider<LocalTripSheetDetails?>((ref) => null);
+
 class LRListNotifier extends AsyncNotifier<List<LRModel>> {
   final Set<String> _locallyDeliveredIds = {}; // Local memory cache for optimistic updates
+
+  // ---- Local Tripsheet state ----
+  String _localTripNumber = '';
+  final Set<String> _deliveringLocalLrs = {}; // guards against double submits
 
   @override
   FutureOr<List<LRModel>> build() async {
@@ -28,6 +42,13 @@ class LRListNotifier extends AsyncNotifier<List<LRModel>> {
     int pageLimit = 50,
   }) async {
     state = const AsyncValue.loading();
+
+    // tripsheet_type == "local": `tripSheetId` is the local_trip_number.
+    if (await TripsheetType.isLocal()) {
+      await _fetchLocalLRs(tripSheetId);
+      return;
+    }
+
     try {
       final lrs = await ref.read(lrApiServiceProvider).fetchLRList(
             tripSheetId: tripSheetId,
@@ -70,6 +91,120 @@ class LRListNotifier extends AsyncNotifier<List<LRModel>> {
       state = AsyncValue.data(mappedLrs);
     } catch (e, stackTrace) {
       state = AsyncValue.error(e, stackTrace);
+    }
+  }
+
+  // ===========================================================================
+  // Local Tripsheet support
+  // ===========================================================================
+
+  Future<void> _fetchLocalLRs(String localTripNumber) async {
+    _localTripNumber = localTripNumber;
+    try {
+      final details = await ref
+          .read(localTripSheetApiServiceProvider)
+          .fetchLocalTripSheetDetails(localTripNumber: localTripNumber);
+      ref.read(localTripSheetDetailsProvider.notifier).state = details;
+      state = AsyncValue.data(details.lrs.map((l) => l.toLRModel()).toList());
+    } catch (e, stackTrace) {
+      state = AsyncValue.error(e, stackTrace);
+    }
+  }
+
+  /// Full Local delivery sequence:
+  ///   1. update_local_lr_delivery.php (throws on failure; nothing is marked
+  ///      delivered locally until it succeeds)
+  ///   2. mark the LR Delivered in state + update counts
+  ///   3. only if `all_lrs_delivered == true`: update_local_trip_sheet_status.php
+  ///
+  /// A failure in step 3 does NOT fail the delivery: it is reported through
+  /// [LocalDeliveryOutcome.tripStatusError] and can be retried with
+  /// [retryLocalTripStatus] without re-calling the LR delivery API.
+  Future<LocalDeliveryOutcome> deliverLocalLR({
+    required LRModel lr,
+    required String receivedPerson,
+  }) async {
+    // Re-entrancy guard (double tap / rebuild).
+    if (!_deliveringLocalLrs.add(lr.lrId)) {
+      throw LocalTripApiException('Delivery is already in progress.');
+    }
+    final api = ref.read(localTripSheetApiServiceProvider);
+    final person = receivedPerson.trim();
+    try {
+      final result = await api.updateLocalLrDelivery(
+        localTripSheetId: _localTripNumber,
+        lrId: lr.lrNumber,
+        receivedPerson: person,
+        receivedMobileNumber: lr.receivedMobileNumber.isNotEmpty
+            ? lr.receivedMobileNumber
+            : lr.consigneePhone,
+        deliveryPin: lr.deliveryPin,
+        pinNotProvided: lr.pinNotProvided,
+        paymentMode: lr.paymentMode,
+        receivedIdentification: lr.receivedIdentification.isNotEmpty
+            ? lr.receivedIdentification
+            : '$person Signed',
+        collectedAmount: lr.collectableAmount,
+      );
+
+      // Delivery API succeeded -> now (and only now) update local state.
+      _markLocalLrDelivered(lr.lrId);
+
+      String? tripStatusError;
+      var tripMarked = false;
+      if (result.allLrsDelivered) {
+        try {
+          await api.updateLocalTripSheetStatus(localTripNumber: _localTripNumber);
+          tripMarked = true;
+        } catch (e) {
+          tripStatusError = e.toString().replaceFirst('Exception: ', '');
+        }
+      }
+      return LocalDeliveryOutcome(
+        result: result,
+        tripSheetMarkedDelivered: tripMarked,
+        tripStatusError: tripStatusError,
+      );
+    } finally {
+      _deliveringLocalLrs.remove(lr.lrId);
+    }
+  }
+
+  /// Retries only the tripsheet status call (never the LR delivery call).
+  /// Returns null on success, or an error message.
+  Future<String?> retryLocalTripStatus() async {
+    try {
+      await ref
+          .read(localTripSheetApiServiceProvider)
+          .updateLocalTripSheetStatus(localTripNumber: _localTripNumber);
+      return null;
+    } catch (e) {
+      return e.toString().replaceFirst('Exception: ', '');
+    }
+  }
+
+  void _markLocalLrDelivered(String lrId) {
+    final current = state;
+    if (current is! AsyncData<List<LRModel>>) return;
+    final updated = current.value
+        .map((l) => l.lrId == lrId
+            ? l.copyWith(status: 'Delivered', deliveryStatus: 'delivered')
+            : l)
+        .toList();
+    state = AsyncValue.data(updated);
+
+    final details = ref.read(localTripSheetDetailsProvider);
+    if (details != null) {
+      final delivered =
+          updated.where((l) => l.status.toLowerCase() == 'delivered').length;
+      final pending = details.totalLrsCount > delivered
+          ? details.totalLrsCount - delivered
+          : 0;
+      ref.read(localTripSheetDetailsProvider.notifier).state =
+          details.copyWithCounts(
+        deliveredLrsCount: delivered,
+        pendingLrsCount: pending,
+      );
     }
   }
 

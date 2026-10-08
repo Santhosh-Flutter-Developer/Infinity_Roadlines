@@ -578,7 +578,9 @@ class _TripActionSectionState extends ConsumerState<_TripActionSection> {
                     .read(firestoreServiceProvider)
                     .updateTripStatus(trip.tripId, 'started');
               }
-              context.go('/driver/trips/${trip.tripId}');
+              // Encode: Local trip numbers contain '/' (e.g. MTP/LTS/0002/26-27).
+              // go_router decodes the path parameter back to the original value.
+              context.go('/driver/trips/${Uri.encodeComponent(trip.tripId)}');
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.primary,

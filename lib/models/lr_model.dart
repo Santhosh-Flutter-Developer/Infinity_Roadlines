@@ -36,6 +36,16 @@ class LRModel {
   final double chargeAmount;
   final String consignorPhone;
 
+  // Local Tripsheet-only extras. Empty/default for General LRs.
+  final String parentTripNumber;
+  final String deliveryPin;
+  final String paymentMode;
+  final double collectableAmount;
+  final int pinNotProvided;
+  final String receivedPerson;
+  final String receivedMobileNumber;
+  final String receivedIdentification;
+
   LRModel({
     this.lrId = '',
     this.lrNumber = '',
@@ -73,6 +83,16 @@ class LRModel {
     this.extraCharges = '',
     this.chargeAmount = 0.0,
     this.consignorPhone = '',
+
+    // Local Tripsheet extras
+    this.parentTripNumber = '',
+    this.deliveryPin = '',
+    this.paymentMode = '',
+    this.collectableAmount = 0.0,
+    this.pinNotProvided = 0,
+    this.receivedPerson = '',
+    this.receivedMobileNumber = '',
+    this.receivedIdentification = '',
   });
 
   factory LRModel.fromJson(Map<String, dynamic> json) {
@@ -114,6 +134,7 @@ class LRModel {
   }
 
   LRModel copyWith({
+    String? status,
     String? deliveryStatus,
     DateTime? deliveredAt,
     double? deliveredLat,
@@ -134,7 +155,7 @@ class LRModel {
       quantity: quantity,
       unitName: unitName,
       amount: amount,
-      status: status,
+      status: status ?? this.status,
       billType: billType,
       deliveryStatus: deliveryStatus ?? this.deliveryStatus,
       destination: destination,
@@ -154,6 +175,14 @@ class LRModel {
       extraCharges: extraCharges,
       chargeAmount: chargeAmount,
       consignorPhone: consignorPhone,
+      parentTripNumber: parentTripNumber,
+      deliveryPin: deliveryPin,
+      paymentMode: paymentMode,
+      collectableAmount: collectableAmount,
+      pinNotProvided: pinNotProvided,
+      receivedPerson: receivedPerson,
+      receivedMobileNumber: receivedMobileNumber,
+      receivedIdentification: receivedIdentification,
     );
   }
 }

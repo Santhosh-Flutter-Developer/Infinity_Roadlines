@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:infinity_roadlines/providers/trip_sheet_provider.dart';
+import '../../models/lr_model.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/lr_provider.dart';
+import '../../services/local_trip_sheet_api_service.dart';
+import 'local_delivery_dialog.dart';
 import 'lr_map_tracker_dialog.dart';
 
 class LrListScreen extends ConsumerStatefulWidget {
@@ -17,12 +20,82 @@ class LrListScreen extends ConsumerStatefulWidget {
 }
 
 class _LrListScreenState extends ConsumerState<LrListScreen> {
+  // tripsheet_type == "local" (read from the saved login session).
+  bool _isLocal = false;
+
   @override
   void initState() {
     super.initState();
+    TripsheetType.isLocal().then((value) {
+      if (mounted && value != _isLocal) setState(() => _isLocal = value);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(lrListProvider.notifier).fetchLRs(tripSheetId: widget.tripId);
     });
+  }
+
+  /// Local Tripsheet delivery: popup -> update_local_lr_delivery.php ->
+  /// (only if all_lrs_delivered == true) update_local_trip_sheet_status.php.
+  void _showLocalDeliveryDialog(LRModel lr) {
+    final messenger = ScaffoldMessenger.of(context);
+    final lrNotifier = ref.read(lrListProvider.notifier);
+    final tripSheetsNotifier = ref.read(tripSheetsProvider.notifier);
+
+    showLocalDeliveryDialog(
+      context: context,
+      localTripNumber: widget.tripId,
+      lr: lr,
+      onSubmit: (receivedPerson) async {
+        try {
+          final outcome = await lrNotifier.deliverLocalLR(
+            lr: lr,
+            receivedPerson: receivedPerson,
+          );
+          messenger.showSnackBar(
+            SnackBar(content: Text(outcome.result.message)),
+          );
+
+          if (outcome.tripStatusError != null) {
+            // LR delivery already succeeded: keep it, only offer a retry of
+            // the tripsheet status call.
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(
+                  'LR delivered, but the tripsheet status could not be updated: ${outcome.tripStatusError}',
+                ),
+                backgroundColor: Colors.orange.shade800,
+                duration: const Duration(seconds: 10),
+                action: SnackBarAction(
+                  label: 'Retry',
+                  textColor: Colors.white,
+                  onPressed: () async {
+                    final error = await lrNotifier.retryLocalTripStatus();
+                    if (error == null) {
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Tripsheet marked as Delivered')),
+                      );
+                      tripSheetsNotifier.fetchTripSheets();
+                    } else {
+                      messenger.showSnackBar(
+                        SnackBar(content: Text(error), backgroundColor: Colors.red),
+                      );
+                    }
+                  },
+                ),
+              ),
+            );
+          }
+          tripSheetsNotifier.fetchTripSheets();
+        } catch (e) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(e.toString().replaceFirst('Exception: ', '')),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      },
+    );
   }
 
   void _showDeliveryConfirmationDialog(String lrId) {
@@ -198,13 +271,56 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                             style: const TextStyle(fontSize: 14),
                           ),
                           const SizedBox(height: 6),
-                          Text(
-                            'Route: ${lr.fromBranch}  ➔  ${lr.toBranch}',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
+                          if (!_isLocal || lr.fromBranch.isNotEmpty || lr.toBranch.isNotEmpty)
+                            Text(
+                              'Route: ${lr.fromBranch}  ➔  ${lr.toBranch}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
+                          // Local Tripsheet extras (empty for General LRs).
+                          if (_isLocal && lr.parentTripNumber.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text('Parent Tripsheet: ${lr.parentTripNumber}',
+                                style: const TextStyle(fontSize: 14)),
+                          ],
+                          if (_isLocal && lr.consigneePhone.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text('Consignee Mobile: ${lr.consigneePhone}',
+                                style: const TextStyle(fontSize: 14)),
+                          ],
+                          if (_isLocal && lr.consignorPhone.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text('Consignor Mobile: ${lr.consignorPhone}',
+                                style: const TextStyle(fontSize: 14)),
+                          ],
+                          if (_isLocal && lr.address.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text('Address: ${lr.address}',
+                                style: const TextStyle(fontSize: 14)),
+                          ],
+                          if (_isLocal && lr.billType.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text('Bill Type: ${lr.billType}',
+                                style: const TextStyle(fontSize: 14)),
+                          ],
+                          if (_isLocal && lr.paymentMode.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text('Payment Mode: ${lr.paymentMode}',
+                                style: const TextStyle(fontSize: 14)),
+                          ],
+                          if (_isLocal && lr.deliveryPin.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text('Delivery PIN: ${lr.deliveryPin}',
+                                style: const TextStyle(fontSize: 14)),
+                          ],
+                          if (_isLocal && lr.collectableAmount > 0) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                                'Collectable Amount: ₹${lr.collectableAmount.toStringAsFixed(2)}',
+                                style: const TextStyle(fontSize: 14)),
+                          ],
                           if (lr.weight.toString() != "")
                           const SizedBox(height: 6),
 
@@ -341,10 +457,11 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
                                       SizedBox(
                                         width: double.infinity,
                                         child: ElevatedButton.icon(
-                                          onPressed: () =>
-                                              _showDeliveryConfirmationDialog(
-                                                lr.lrId,
-                                              ),
+                                          onPressed: () => _isLocal
+                                              ? _showLocalDeliveryDialog(lr)
+                                              : _showDeliveryConfirmationDialog(
+                                                  lr.lrId,
+                                                ),
                                           icon: const Icon(Icons.check_circle),
                                           label: const Text('Delivered'),
                                           style: ElevatedButton.styleFrom(
