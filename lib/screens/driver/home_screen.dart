@@ -10,7 +10,7 @@ import '../../providers/trip_card_provider.dart';
 import '../../providers/lr_provider.dart';
 import '../../models/trip_model.dart';
 import '../../services/local_trip_sheet_api_service.dart';
-import 'local_trip_sheet_tabs.dart';
+import 'trip_sheet_tabs.dart';
 
 class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
@@ -26,18 +26,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Decides which API the Dispatched/Completed tabs use (Local or General).
     TripsheetType.isLocal().then((isLocal) {
-      if (!mounted) return;
-      setState(() => _isLocal = isLocal);
-      // General drivers: exactly the previous behaviour. Local drivers load
-      // their own paged lists inside LocalTripSheetTabs.
-      if (!isLocal) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          ref.read(tripSheetsProvider.notifier).fetchTripSheets();
-          ref.read(tripCardsProvider.notifier).fetchTripCards();
-        });
-      }
+      if (mounted) setState(() => _isLocal = isLocal);
     });
   }
 
@@ -46,8 +37,6 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     ref.watch(driverLocationNotifierProvider);
 
     final user = ref.watch(authStateProvider).value;
-    // Only the General flow uses the single (non-paged) tripsheet provider.
-    final tripsAsync = _isLocal == false ? ref.watch(driverTripsProvider) : null;
     final tripCardsAsync = ref.watch(driverTripCardsProvider);
     final currentLocation = ref.watch(driverCurrentLocationProvider);
     final themeMode = ref.watch(themeModeProvider);
@@ -151,197 +140,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
               ),
               if (_isLocal == null)
                 const Expanded(child: Center(child: CircularProgressIndicator()))
-              else if (_isLocal == true)
-                Expanded(
-                  child: LocalTripSheetTabs(cardBuilder: _buildTripCard),
-                )
               else
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Active Trip Sheet',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      tripsAsync!.when(
-                        data: (trips) {
-                          if (trips.isEmpty) {
-                            return const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(16.0),
-                                child: Text(
-                                  'No Trip Sheet Assigned',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }
-                          return ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: trips.length,
-                            itemBuilder: (context, index) {
-                              final trip = trips[index];
-                              return _buildTripCard(context, trips[index]);
-                            },
-                          );
-                        },
-                        loading: () =>
-                            const Center(child: CircularProgressIndicator()),
-                        error: (err, stack) => Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Error: $err',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.red),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton.icon(
-                                onPressed: () => ref
-                                    .read(tripSheetsProvider.notifier)
-                                    .fetchTripSheets(),
-                                icon: const Icon(Icons.refresh),
-                                label: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      /*const SizedBox(height: 24),
-                      const Text(
-                        'Trip Cards',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      tripCardsAsync.when(
-                        data: (cards) {
-                          if (cards.isEmpty) {
-                            return const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(16.0),
-                                child: Text(
-                                  'No Trip Cards Assigned',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }
-                          return ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: cards.length,
-                            itemBuilder: (context, index) {
-                              final card = cards[index];
-                              return Card(
-                                elevation: 4,
-                                margin: const EdgeInsets.only(bottom: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  side: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outline.withOpacity(0.5),
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Trip Card: ${card.tripCardNumber}',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 18,
-                                        ),
-                                      ),
-                                      const Divider(height: 24),
-                                      Text(
-                                        'Date: ${card.entryDate.day.toString().padLeft(2, '0')}-${card.entryDate.month.toString().padLeft(2, '0')}-${card.entryDate.year}',
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Vehicle Check: ${card.vehicleNumber}',
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Driver Name: ${card.driverName}',
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Route: ${card.fromBranch} ➔ ${card.toBranch}',
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Quantity: ${card.quantity} ${card.unitName}',
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Driver Salary: ₹${card.driverSalary}',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.green,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                        loading: () =>
-                            const Center(child: CircularProgressIndicator()),
-                        error: (err, stack) => Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Error: $err',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.red),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton.icon(
-                                onPressed: () => ref
-                                    .read(tripCardsProvider.notifier)
-                                    .fetchTripCards(),
-                                icon: const Icon(Icons.refresh),
-                                label: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),*/
-                    ],
+                Expanded(
+                  child: TripSheetTabs(
+                    isLocal: _isLocal!,
+                    cardBuilder: _buildTripCard,
                   ),
                 ),
-              ),
             ],
           ),
         ),

@@ -16,6 +16,7 @@ class TripSheetApiService {
     String destination = '',
     String search = '',
     String filterTripsheet = '',
+    String status = '', // "Dispatched" / "Completed" (tabs); empty = not sent
     int pageNumber = 1,
     int pageLimit = 10,
   }) async {
@@ -52,6 +53,7 @@ class TripSheetApiService {
         'filter_tripsheet': filterTripsheet,
         'page_number': pageNumber,
         'page_limit': pageLimit,
+        if (status.isNotEmpty) 'status': status,
         'token': token, // Providing token directly in the POST body payload for auth.php fallback
       };
 

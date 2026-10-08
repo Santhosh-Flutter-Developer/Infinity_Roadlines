@@ -5,7 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:infinity_roadlines/providers/trip_sheet_provider.dart';
 import '../../models/lr_model.dart';
 import '../../providers/location_provider.dart';
-import '../../providers/local_trip_list_provider.dart';
+import '../../providers/trip_list_provider.dart';
 import '../../providers/lr_provider.dart';
 import '../../services/local_trip_sheet_api_service.dart';
 import 'local_delivery_dialog.dart';
@@ -42,11 +42,12 @@ class _LrListScreenState extends ConsumerState<LrListScreen> {
   void dispose() {
     // Leaving the LR screen (back button, system back, after a delivery...)
     // returns to the Tripsheet page, which stays mounted underneath. Drop the
-    // Local lists so they are fetched again from the API.
-    if (_isLocal) {
-      final container = _container;
-      Future.microtask(() => container.invalidate(localTripListProvider));
-    }
+    // Dispatched/Completed lists so they are fetched again from the API.
+    final container = _container;
+    Future.microtask(() {
+      container.invalidate(localTripListProvider);
+      container.invalidate(generalTripListProvider);
+    });
     super.dispose();
   }
 

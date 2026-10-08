@@ -1,22 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/trip_model.dart';
-import '../../providers/local_trip_list_provider.dart';
+import '../../providers/trip_list_provider.dart';
 
-/// "Dispatched" / "Completed" tabs for Local drivers. Each tab is a paged list
+/// "Dispatched" / "Completed" tabs for Local and General drivers. Each tab is a paged list
 /// (20 per page) that renders every row with the same card the General list
 /// uses ([cardBuilder]). The API is called again every time a tab is selected
 /// (tap or swipe) and when the already-selected tab is tapped again.
-class LocalTripSheetTabs extends StatefulWidget {
+class TripSheetTabs extends StatefulWidget {
+  /// true -> Local tripsheet APIs, false -> General tripsheet API.
+  final bool isLocal;
   final Widget Function(BuildContext context, TripModel trip) cardBuilder;
 
-  const LocalTripSheetTabs({super.key, required this.cardBuilder});
+  const TripSheetTabs({
+    super.key,
+    required this.isLocal,
+    required this.cardBuilder,
+  });
 
   @override
-  State<LocalTripSheetTabs> createState() => _LocalTripSheetTabsState();
+  State<TripSheetTabs> createState() => _TripSheetTabsState();
 }
 
-class _LocalTripSheetTabsState extends State<LocalTripSheetTabs>
+class _TripSheetTabsState extends State<TripSheetTabs>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
@@ -64,16 +70,18 @@ class _LocalTripSheetTabsState extends State<LocalTripSheetTabs>
           child: TabBarView(
             controller: _tabController,
             children: [
-              _LocalTripList(
-                status: localStatusDispatched,
+              _TripList(
+                isLocal: widget.isLocal,
+                status: tripStatusDispatched,
                 emptyText: 'No Trip Sheet Assigned',
                 cardBuilder: widget.cardBuilder,
                 tabController: _tabController,
                 tabIndex: 0,
                 retapSignal: _retap[0],
               ),
-              _LocalTripList(
-                status: localStatusCompleted,
+              _TripList(
+                isLocal: widget.isLocal,
+                status: tripStatusCompleted,
                 emptyText: 'No Completed Trip Sheet',
                 cardBuilder: widget.cardBuilder,
                 tabController: _tabController,
@@ -88,7 +96,8 @@ class _LocalTripSheetTabsState extends State<LocalTripSheetTabs>
   }
 }
 
-class _LocalTripList extends ConsumerStatefulWidget {
+class _TripList extends ConsumerStatefulWidget {
+  final bool isLocal;
   final String status;
   final String emptyText;
   final Widget Function(BuildContext context, TripModel trip) cardBuilder;
@@ -96,7 +105,8 @@ class _LocalTripList extends ConsumerStatefulWidget {
   final int tabIndex;
   final Listenable retapSignal;
 
-  const _LocalTripList({
+  const _TripList({
+    required this.isLocal,
     required this.status,
     required this.emptyText,
     required this.cardBuilder,
@@ -106,18 +116,21 @@ class _LocalTripList extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_LocalTripList> createState() => _LocalTripListState();
+  ConsumerState<_TripList> createState() => _TripListState();
 }
 
-class _LocalTripListState extends ConsumerState<_LocalTripList>
+class _TripListState extends ConsumerState<_TripList>
     with AutomaticKeepAliveClientMixin {
   final ScrollController _controller = ScrollController();
 
   @override
   bool get wantKeepAlive => true;
 
-  LocalTripListNotifier get _notifier =>
-      ref.read(localTripListProvider(widget.status).notifier);
+  TripListNotifier get _notifier => ref.read(
+        (widget.isLocal ? localTripListProvider : generalTripListProvider)(
+          widget.status,
+        ).notifier,
+      );
 
   late bool _wasSelected;
 
@@ -171,7 +184,7 @@ class _LocalTripListState extends ConsumerState<_LocalTripList>
 
   /// If the first page doesn't fill the screen there is nothing to scroll, so
   /// the scroll listener would never fire: keep loading until it does.
-  void _fillViewportIfNeeded(LocalTripListState s) {
+  void _fillViewportIfNeeded(TripListState s) {
     if (s.items.isEmpty || !s.hasMore || s.isLoadingMore) return;
     if (s.loadMoreError != null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -183,7 +196,11 @@ class _LocalTripListState extends ConsumerState<_LocalTripList>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final s = ref.watch(localTripListProvider(widget.status));
+    final s = ref.watch(
+      (widget.isLocal ? localTripListProvider : generalTripListProvider)(
+        widget.status,
+      ),
+    );
 
     if (s.isLoading) {
       return const Center(child: CircularProgressIndicator());

@@ -3,15 +3,40 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/local_trip_sheet_model.dart';
 import '../models/trip_model.dart';
 import '../services/local_trip_sheet_api_service.dart';
+import '../services/trip_sheet_api_service.dart';
 import 'lr_provider.dart' show localTripSheetApiServiceProvider;
+import 'trip_sheet_provider.dart' show tripSheetApiServiceProvider;
 
-/// Records requested per page for the Local tripsheet lists.
-const int localTripPageLimit = 20;
+/// Records requested per page for the tripsheet lists (Local and General).
+const int tripPageLimit = 20;
 
-const String localStatusDispatched = 'Dispatched';
-const String localStatusCompleted = 'Completed';
+const String tripStatusDispatched = 'Dispatched';
+const String tripStatusCompleted = 'Completed';
 
-class LocalTripListState {
+/// One page of tripsheets, already mapped to the card model.
+class TripListPage {
+  final List<TripModel> items;
+
+  /// Rows the API returned for this page (before any client-side filtering).
+  final int rawCount;
+
+  /// 0 when the API does not report `total_pages`.
+  final int totalPages;
+
+  TripListPage({
+    required this.items,
+    required this.rawCount,
+    this.totalPages = 0,
+  });
+}
+
+typedef TripPageFetcher = Future<TripListPage> Function(
+  String status,
+  int page,
+  int limit,
+);
+
+class TripListState {
   final List<TripModel> items;
 
   /// First load / refresh while nothing is on screen yet.
@@ -26,7 +51,7 @@ class LocalTripListState {
   final int page;
   final bool hasMore;
 
-  const LocalTripListState({
+  const TripListState({
     this.items = const [],
     this.isLoading = false,
     this.isLoadingMore = false,
@@ -36,7 +61,7 @@ class LocalTripListState {
     this.hasMore = false,
   });
 
-  LocalTripListState copyWith({
+  TripListState copyWith({
     List<TripModel>? items,
     bool? isLoading,
     bool? isLoadingMore,
@@ -47,7 +72,7 @@ class LocalTripListState {
     int? page,
     bool? hasMore,
   }) {
-    return LocalTripListState(
+    return TripListState(
       items: items ?? this.items,
       isLoading: isLoading ?? this.isLoading,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
@@ -60,8 +85,8 @@ class LocalTripListState {
   }
 }
 
-class LocalTripListNotifier extends StateNotifier<LocalTripListState> {
-  final LocalTripSheetApiService _api;
+class TripListNotifier extends StateNotifier<TripListState> {
+  final TripPageFetcher _fetch;
   final String status;
 
   /// Bumped on every refresh so a slow, outdated response can never overwrite
@@ -72,23 +97,15 @@ class LocalTripListNotifier extends StateNotifier<LocalTripListState> {
   /// such as a tab tap landing at the same moment.
   bool _refreshInFlight = false;
 
-  LocalTripListNotifier(this._api, this.status)
-      : super(const LocalTripListState(isLoading: true));
-
-  Future<List<TripModel>> _toTrips(List<LocalTripSheet> sheets) async {
-    final prefs = await SharedPreferences.getInstance();
-    final driverId = prefs.getString('user_id') ?? '';
-    return sheets
-        .map((t) => t.toTripSheetModel(driverId: driverId).toTripModel())
-        .toList();
-  }
+  TripListNotifier(this._fetch, this.status)
+      : super(const TripListState(isLoading: true));
 
   /// Uses `total_pages` when the API sends it, otherwise "a full page means
   /// there may be more". An empty page always means the end.
-  bool _hasMore(LocalTripSheetPage result, int page) {
-    if (result.items.isEmpty) return false;
+  bool _hasMore(TripListPage result, int page) {
+    if (result.rawCount == 0) return false;
     if (result.totalPages > 0) return page < result.totalPages;
-    return result.items.length >= localTripPageLimit;
+    return result.rawCount >= tripPageLimit;
   }
 
   String _message(Object e) => e.toString().replaceFirst('Exception: ', '');
@@ -105,14 +122,10 @@ class LocalTripListNotifier extends StateNotifier<LocalTripListState> {
       clearLoadMoreError: true,
     );
     try {
-      final result = await _api.fetchLocalTripSheetPage(
-        status: status,
-        pageNumber: 1,
-        pageLimit: localTripPageLimit,
-      );
-      final trips = await _toTrips(result.items);
+      final result = await _fetch(status, 1, tripPageLimit);
+      final trips = result.items;
       if (!mounted || gen != _generation) return null;
-      state = LocalTripListState(
+      state = TripListState(
         items: trips,
         page: 1,
         hasMore: _hasMore(result, 1),
@@ -139,12 +152,8 @@ class LocalTripListNotifier extends StateNotifier<LocalTripListState> {
     final nextPage = state.page + 1;
     state = state.copyWith(isLoadingMore: true, clearLoadMoreError: true);
     try {
-      final result = await _api.fetchLocalTripSheetPage(
-        status: status,
-        pageNumber: nextPage,
-        pageLimit: localTripPageLimit,
-      );
-      final trips = await _toTrips(result.items);
+      final result = await _fetch(status, nextPage, tripPageLimit);
+      final trips = result.items;
       if (!mounted || gen != _generation) return;
 
       // Never show the same tripsheet twice if pages overlap.
@@ -166,15 +175,81 @@ class LocalTripListNotifier extends StateNotifier<LocalTripListState> {
   }
 }
 
+/// Local drivers: get_local_trip_sheet_list.php (`status` = Dispatched/Completed).
+Future<TripListPage> _fetchLocalPage(
+  LocalTripSheetApiService api,
+  String status,
+  int page,
+  int limit,
+) async {
+  final prefs = await SharedPreferences.getInstance();
+  final driverId = prefs.getString('user_id') ?? '';
+  final result = await api.fetchLocalTripSheetPage(
+    status: status,
+    pageNumber: page,
+    pageLimit: limit,
+  );
+  return TripListPage(
+    items: result.items
+        .map((t) => t.toTripSheetModel(driverId: driverId).toTripModel())
+        .toList(),
+    rawCount: result.items.length,
+    totalPages: result.totalPages,
+  );
+}
+
+/// Which tab a General tripsheet belongs to: "Completed" tab = completed,
+/// everything else is still in progress = "Dispatched" tab.
+bool _belongsToTab(String tripStatus, String tab) {
+  final completed = tripStatus.trim().toLowerCase() == 'completed';
+  return tab == tripStatusCompleted ? completed : !completed;
+}
+
+/// General drivers: get_trip_sheet_list.php with `status` = tab status
+/// (same key as the Local API). Rows that don't belong to the tab are dropped as a safety net in
+/// case the server ignores the filter.
+Future<TripListPage> _fetchGeneralPage(
+  TripSheetApiService api,
+  String status,
+  int page,
+  int limit,
+) async {
+  final list = await api.fetchTripSheets(
+    status: status,
+    pageNumber: page,
+    pageLimit: limit,
+  );
+  return TripListPage(
+    items: list
+        .map((t) => t.toTripModel())
+        .where((t) => _belongsToTab(t.status, status))
+        .toList(),
+    rawCount: list.length,
+  );
+}
+
 /// One paged list per status ("Dispatched" / "Completed"). `autoDispose`, so
 /// leaving the home screen drops the data and it is reloaded fresh on return
-/// (same as the General list) and never leaks between logins.
+/// and never leaks between logins. The list loads as soon as it is created, so
+/// invalidating the provider reloads it.
 final localTripListProvider = StateNotifierProvider.autoDispose
-    .family<LocalTripListNotifier, LocalTripListState, String>((ref, status) {
-  final notifier =
-      LocalTripListNotifier(ref.watch(localTripSheetApiServiceProvider), status);
-  // Load as soon as the list is created. Invalidating the provider (e.g. after
-  // an LR is delivered) therefore reloads it automatically.
+    .family<TripListNotifier, TripListState, String>((ref, status) {
+  final api = ref.watch(localTripSheetApiServiceProvider);
+  final notifier = TripListNotifier(
+    (st, page, limit) => _fetchLocalPage(api, st, page, limit),
+    status,
+  );
+  Future.microtask(notifier.refresh);
+  return notifier;
+});
+
+final generalTripListProvider = StateNotifierProvider.autoDispose
+    .family<TripListNotifier, TripListState, String>((ref, status) {
+  final api = ref.watch(tripSheetApiServiceProvider);
+  final notifier = TripListNotifier(
+    (st, page, limit) => _fetchGeneralPage(api, st, page, limit),
+    status,
+  );
   Future.microtask(notifier.refresh);
   return notifier;
 });
